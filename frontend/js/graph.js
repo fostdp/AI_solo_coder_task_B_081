@@ -31,6 +31,15 @@ class GraphVisualization {
             '大寒': '#1a5276', '微寒': '#5dade2'
         };
 
+        this.riskColorMap = {
+            '极高': '#b71c1c', '高': '#e53935', '中': '#fb8c00',
+            '低': '#fdd835', '安全': '#43a047'
+        };
+
+        this.riskEdges = [];
+        this.riskEdgeGroup = null;
+        this.showRiskEdges = true;
+
         this.init();
     }
 
@@ -117,6 +126,37 @@ class GraphVisualization {
                 return t ? t.y : 0;
             });
 
+        if (this.riskEdgeGroup) {
+            this.riskEdgeGroup.selectAll('line.risk-link')
+                .attr('x1', d => {
+                    var s = typeof d.source === 'object' ? d.source : this.findNode(d.source);
+                    return s ? s.x : 0;
+                })
+                .attr('y1', d => {
+                    var s = typeof d.source === 'object' ? d.source : this.findNode(d.source);
+                    return s ? s.y : 0;
+                })
+                .attr('x2', d => {
+                    var t = typeof d.target === 'object' ? d.target : this.findNode(d.target);
+                    return t ? t.x : 0;
+                })
+                .attr('y2', d => {
+                    var t = typeof d.target === 'object' ? d.target : this.findNode(d.target);
+                    return t ? t.y : 0;
+                });
+            this.riskEdgeGroup.selectAll('text.risk-label')
+                .attr('x', d => {
+                    var s = typeof d.source === 'object' ? d.source : this.findNode(d.source);
+                    var t = typeof d.target === 'object' ? d.target : this.findNode(d.target);
+                    return (s && t) ? (s.x + t.x) / 2 : 0;
+                })
+                .attr('y', d => {
+                    var s = typeof d.source === 'object' ? d.source : this.findNode(d.source);
+                    var t = typeof d.target === 'object' ? d.target : this.findNode(d.target);
+                    return (s && t) ? (s.y + t.y) / 2 - 6 : 0;
+                });
+        }
+
         this.nodeGroup.selectAll('.node')
             .attr('transform', d => `translate(${d.x}, ${d.y})`);
 
@@ -158,6 +198,7 @@ class GraphVisualization {
     setupGroups() {
         this.g = this.svg.append('g').attr('class', 'graph-group');
         this.linkGroup = this.g.append('g').attr('class', 'links');
+        this.riskEdgeGroup = this.g.append('g').attr('class', 'risk-edges');
         this.nodeGroup = this.g.append('g').attr('class', 'nodes');
         this.labelGroup = this.g.append('g').attr('class', 'labels');
     }
@@ -401,6 +442,114 @@ class GraphVisualization {
         }
 
         this.drawCanvasBackground();
+        this.renderRiskEdges();
+    }
+
+    renderRiskEdges() {
+        if (!this.riskEdgeGroup) return;
+        this.riskEdgeGroup.selectAll('*').remove();
+
+        var riskEdges = window.riskEdges || this.riskEdges || [];
+        if (!riskEdges.length || !this.showRiskEdges) return;
+
+        var validRiskEdges = riskEdges.filter(re => {
+            var srcId = re.herb_a || re.source;
+            var tgtId = re.herb_b || re.target;
+            return this.findNode(srcId) && this.findNode(tgtId);
+        }).map(re => ({
+            source: re.herb_a || re.source,
+            target: re.herb_b || re.target,
+            risk_level: re.risk_level || '中',
+            risk_score: re.risk_score || 0.5,
+            interaction_type: re.interaction_type || '',
+            mechanism: re.mechanism || ''
+        }));
+
+        if (!validRiskEdges.length) return;
+
+        var self = this;
+
+        this.riskEdgeGroup.selectAll('line.risk-link')
+            .data(validRiskEdges)
+            .enter()
+            .append('line')
+            .attr('class', 'risk-link')
+            .attr('stroke', d => self.riskColorMap[d.risk_level] || '#fb8c00')
+            .attr('stroke-width', d => Math.max(2, Math.min(5, 1.5 + (d.risk_score || 0.5) * 4)))
+            .attr('stroke-dasharray', d => {
+                if (d.risk_level === '极高') return '8,4';
+                if (d.risk_level === '高') return '6,3';
+                if (d.risk_level === '中') return '4,3';
+                return '2,3';
+            })
+            .attr('stroke-opacity', 0.85)
+            .style('pointer-events', 'stroke')
+            .on('mouseover', function(event, d) {
+                d3.select(this).attr('stroke-opacity', 1).attr('stroke-width', (d.risk_score || 0.5) * 6 + 2);
+                self.showRiskTooltip(event, d);
+            })
+            .on('mouseout', function() {
+                d3.select(this).attr('stroke-opacity', 0.85)
+                    .attr('stroke-width', Math.max(2, Math.min(5, 1.5 + (d.risk_score || 0.5) * 4)));
+                self.hideRiskTooltip();
+            });
+
+        this.riskEdgeGroup.selectAll('text.risk-label')
+            .data(validRiskEdges.filter(d => d.risk_level === '极高' || d.risk_level === '高'))
+            .enter()
+            .append('text')
+            .attr('class', 'risk-label')
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '10px')
+            .attr('font-weight', 'bold')
+            .attr('fill', d => self.riskColorMap[d.risk_level] || '#fb8c00')
+            .attr('stroke', 'white')
+            .attr('stroke-width', 3)
+            .attr('paint-order', 'stroke')
+            .text(d => d.risk_level);
+    }
+
+    showRiskTooltip(event, d) {
+        var tooltip = document.getElementById('risk-tooltip');
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.id = 'risk-tooltip';
+            tooltip.className = 'risk-tooltip';
+            document.body.appendChild(tooltip);
+        }
+        var src = typeof d.source === 'object' ? d.source.id : d.source;
+        var tgt = typeof d.target === 'object' ? d.target.id : d.target;
+        tooltip.innerHTML = `
+            <div style="font-weight:600;margin-bottom:6px;color:${this.riskColorMap[d.risk_level]}">
+                ⚠️ ${d.risk_level}风险药对
+            </div>
+            <div style="margin-bottom:4px"><strong>${src}</strong> × <strong>${tgt}</strong></div>
+            <div style="font-size:12px;color:#666;margin-bottom:4px">类型：${d.interaction_type || '配伍禁忌'}</div>
+            ${d.mechanism ? `<div style="font-size:12px;color:#888">${d.mechanism}</div>` : ''}
+            <div style="margin-top:6px;font-size:11px;color:#999">风险评分：${(d.risk_score * 100).toFixed(0)}分</div>
+        `;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (event.pageX + 12) + 'px';
+        tooltip.style.top = (event.pageY + 12) + 'px';
+    }
+
+    hideRiskTooltip() {
+        var tooltip = document.getElementById('risk-tooltip');
+        if (tooltip) tooltip.style.display = 'none';
+    }
+
+    setRiskEdges(edges) {
+        this.riskEdges = edges || [];
+        window.riskEdges = this.riskEdges;
+        this.renderRiskEdges();
+    }
+
+    toggleRiskEdges(show) {
+        this.showRiskEdges = show !== undefined ? show : !this.showRiskEdges;
+        if (this.riskEdgeGroup) {
+            this.riskEdgeGroup.style('display', this.showRiskEdges ? 'block' : 'none');
+        }
+        return this.showRiskEdges;
     }
 
     startWorkerSimulation() {
@@ -474,6 +623,37 @@ class GraphVisualization {
                 .attr('y1', d => d.source.y)
                 .attr('x2', d => d.target.x)
                 .attr('y2', d => d.target.y);
+
+            if (self.riskEdgeGroup) {
+                self.riskEdgeGroup.selectAll('line.risk-link')
+                    .attr('x1', d => {
+                        var s = typeof d.source === 'object' ? d.source : self.findNode(d.source);
+                        return s ? s.x : 0;
+                    })
+                    .attr('y1', d => {
+                        var s = typeof d.source === 'object' ? d.source : self.findNode(d.source);
+                        return s ? s.y : 0;
+                    })
+                    .attr('x2', d => {
+                        var t = typeof d.target === 'object' ? d.target : self.findNode(d.target);
+                        return t ? t.x : 0;
+                    })
+                    .attr('y2', d => {
+                        var t = typeof d.target === 'object' ? d.target : self.findNode(d.target);
+                        return t ? t.y : 0;
+                    });
+                self.riskEdgeGroup.selectAll('text.risk-label')
+                    .attr('x', d => {
+                        var s = typeof d.source === 'object' ? d.source : self.findNode(d.source);
+                        var t = typeof d.target === 'object' ? d.target : self.findNode(d.target);
+                        return (s && t) ? (s.x + t.x) / 2 : 0;
+                    })
+                    .attr('y', d => {
+                        var s = typeof d.source === 'object' ? d.source : self.findNode(d.source);
+                        var t = typeof d.target === 'object' ? d.target : self.findNode(d.target);
+                        return (s && t) ? (s.y + t.y) / 2 - 6 : 0;
+                    });
+            }
 
             node.attr('transform', d => `translate(${d.x}, ${d.y})`);
             labels.attr('transform', d => `translate(${d.x}, ${d.y})`);

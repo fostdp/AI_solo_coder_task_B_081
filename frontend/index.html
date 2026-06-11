@@ -58,6 +58,26 @@
                     <span class="nav-icon">🔬</span>
                     <span class="nav-text">新药发现辅助</span>
                 </li>
+                <li class="nav-section-divider"></li>
+                <li class="nav-item nav-section-title">
+                    <span class="nav-text nav-version-tag">✨ v2.0 新功能</span>
+                </li>
+                <li class="nav-item" data-view="efficacy">
+                    <span class="nav-icon">💯</span>
+                    <span class="nav-text">疗效量化评估</span>
+                </li>
+                <li class="nav-item" data-view="dose">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-text">剂量-效应分析</span>
+                </li>
+                <li class="nav-item" data-view="risk">
+                    <span class="nav-icon">⚠️</span>
+                    <span class="nav-text">不良反应挖掘</span>
+                </li>
+                <li class="nav-item" data-view="clinical">
+                    <span class="nav-icon">🏆</span>
+                    <span class="nav-text">临床证据集成</span>
+                </li>
             </ul>
         </nav>
 
@@ -89,6 +109,7 @@
                             </button>
                         </div>
                         <div class="toolbar-right">
+                            <button class="btn" id="btn-toggle-risk-overlay" title="叠加风险药对标注">⚠ 风险</button>
                             <button class="btn" id="btn-zoom-in">放大</button>
                             <button class="btn" id="btn-zoom-out">缩小</button>
                             <button class="btn" id="btn-zoom-reset">重置</button>
@@ -119,6 +140,10 @@
                                 <span class="legend-dot disease-node"></span>
                                 <span>病症</span>
                             </div>
+                            <div class="legend-item" id="legend-risk-edge" style="display:none">
+                                <span style="display:inline-block;width:20px;height:3px;border-top:3px dashed #ff4444;vertical-align:middle;margin-right:4px"></span>
+                                <span>风险药对</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -130,6 +155,10 @@
                             <input type="text" id="formula-search" placeholder="搜索方剂名称...">
                             <select id="formula-dynasty-filter">
                                 <option value="">全部朝代</option>
+                            </select>
+                            <select id="formula-sort-filter">
+                                <option value="">默认排序</option>
+                                <option value="efficacy">按疗效排序</option>
                             </select>
                             <button class="btn btn-primary" id="btn-search-formula">搜索</button>
                         </div>
@@ -144,6 +173,7 @@
                                     <th>主治病症</th>
                                     <th>药味数</th>
                                     <th>使用频率</th>
+                                    <th class="sortable-header" id="th-efficacy-score" style="cursor:pointer">疗效评分 ↕</th>
                                     <th>操作</th>
                                 </tr>
                             </thead>
@@ -354,6 +384,291 @@
                             </div>
                             <div id="target-results">
                                 <p class="placeholder-text">选择靶点进行筛选</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="view efficacy-view" id="view-efficacy">
+                    <div class="view-header">
+                        <h2>💯 方剂疗效量化评估</h2>
+                        <p class="view-subtitle">基于古代医案NLP情感分析 + 序数回归算法</p>
+                    </div>
+                    <div class="efficacy-tabs">
+                        <button class="tab-btn active" data-tab="efficacy-ranked">疗效排行榜</button>
+                        <button class="tab-btn" data-tab="efficacy-single">单方剂分析</button>
+                        <button class="tab-btn" data-tab="efficacy-text-analyzer">文本疗效分析器</button>
+                    </div>
+                    <div class="efficacy-content">
+                        <div class="tab-content active" id="tab-efficacy-ranked">
+                            <div class="mining-controls">
+                                <label>朝代过滤:
+                                    <select id="efficacy-dynasty">
+                                        <option value="">全部朝代</option>
+                                    </select>
+                                </label>
+                                <label>最小医案数:
+                                    <input type="number" id="efficacy-mincases" value="8" min="3" max="100">
+                                </label>
+                                <label>展示数量:
+                                    <input type="number" id="efficacy-limit" value="50" min="10" max="500">
+                                </label>
+                                <button class="btn btn-primary" id="btn-load-efficacy-rank">查询排行榜</button>
+                            </div>
+                            <div id="efficacy-ranked-container">
+                                <p class="placeholder-text">点击查询加载疗效排行榜</p>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="tab-efficacy-single">
+                            <div class="mining-controls">
+                                <label>方剂名称:
+                                    <input type="text" id="efficacy-formula-name" placeholder="输入方剂名...">
+                                </label>
+                                <label>医案数量:
+                                    <input type="number" id="efficacy-num-cases" value="20" min="5" max="200">
+                                </label>
+                                <button class="btn btn-primary" id="btn-analyze-formula-efficacy">分析方剂疗效</button>
+                            </div>
+                            <div id="efficacy-single-container">
+                                <p class="placeholder-text">输入方剂名称进行疗效分析</p>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="tab-efficacy-text-analyzer">
+                            <div class="mining-controls">
+                                <label style="width:100%;">粘贴古代医案疗效描述（如：一剂而愈，诸证悉除）:</label>
+                                <textarea id="efficacy-text-input" rows="3" placeholder="例如：患者服五剂后，诸证减轻，渐入坦途..." style="width:100%;padding:8px;font-family:inherit;"></textarea>
+                                <button class="btn btn-primary" id="btn-analyze-efficacy-text">即时分析</button>
+                            </div>
+                            <div id="efficacy-text-result">
+                                <p class="placeholder-text">输入文本后点击即时分析</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="view dose-view" id="view-dose">
+                    <div class="view-header">
+                        <h2>📊 药物剂量-效应关系分析</h2>
+                        <p class="view-subtitle">限制性立方样条建模 + 剂量Meta分析</p>
+                    </div>
+                    <div class="dose-tabs">
+                        <button class="tab-btn active" data-tab="dose-curve">单药剂量-效应曲线</button>
+                        <button class="tab-btn" data-tab="dose-meta">多研究Meta分析</button>
+                        <button class="tab-btn" data-tab="dose-cross">跨方剂剂量对比</button>
+                    </div>
+                    <div class="dose-content">
+                        <div class="tab-content active" id="tab-dose-curve">
+                            <div class="mining-controls">
+                                <label>中药名称:
+                                    <input type="text" id="dose-herb-name" placeholder="如：麻黄、桂枝、附子...">
+                                </label>
+                                <button class="btn btn-primary" id="btn-compute-dose-curve">计算剂量-效应曲线</button>
+                            </div>
+                            <div id="dose-curve-container">
+                                <p class="placeholder-text">输入中药名称计算曲线</p>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="tab-dose-meta">
+                            <div class="mining-controls">
+                                <label>中药名称:
+                                    <input type="text" id="dose-meta-herb" placeholder="输入中药名...">
+                                </label>
+                                <label>研究数量:
+                                    <input type="number" id="dose-meta-n" value="12" min="3" max="60">
+                                </label>
+                                <button class="btn btn-primary" id="btn-run-dose-meta">执行剂量Meta分析</button>
+                            </div>
+                            <div id="dose-meta-container">
+                                <p class="placeholder-text">点击执行剂量Meta分析</p>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="tab-dose-cross">
+                            <div class="mining-controls">
+                                <label>中药名称:
+                                    <input type="text" id="dose-cross-herb" placeholder="输入中药名，如：甘草、麻黄...">
+                                </label>
+                                <button class="btn btn-primary" id="btn-cross-formula-dose">跨方剂剂量对比</button>
+                            </div>
+                            <div id="dose-cross-container">
+                                <p class="placeholder-text">分析同一药物在不同方剂中的剂量分布，与最优区间对比</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="view risk-view" id="view-risk">
+                    <div class="view-header">
+                        <h2>⚠️ 方剂不良反应挖掘</h2>
+                        <p class="view-subtitle">十八反十九畏 + 毒性成分交叉 + 风险药对标注</p>
+                    </div>
+                    <div class="risk-tabs">
+                        <button class="tab-btn active" data-tab="risk-herb">单药不良反应档案</button>
+                        <button class="tab-btn" data-tab="risk-pairs">风险药对总览</button>
+                        <button class="tab-btn" data-tab="risk-formula">方剂风险评估</button>
+                        <button class="tab-btn" data-tab="risk-annotations">网络图风险标注</button>
+                        <button class="tab-btn" data-tab="risk-textmine">医案文本挖掘</button>
+                    </div>
+                    <div class="risk-content">
+                        <div class="tab-content active" id="tab-risk-herb">
+                            <div class="mining-controls">
+                                <label>中药名称:
+                                    <input type="text" id="risk-herb-name" placeholder="如：附子、马钱子、细辛...">
+                                </label>
+                                <button class="btn btn-primary" id="btn-query-herb-risk">查询风险档案</button>
+                            </div>
+                            <div id="risk-herb-container">
+                                <p class="placeholder-text">输入毒性中药名查询不良反应档案（如：附子、川乌、马钱子等）</p>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="tab-risk-pairs">
+                            <div class="mining-controls">
+                                <label>风险等级过滤:
+                                    <select id="risk-pair-level">
+                                        <option value="">全部</option>
+                                        <option value="极高">极高</option>
+                                        <option value="高">高</option>
+                                        <option value="中">中</option>
+                                        <option value="低">低</option>
+                                    </select>
+                                </label>
+                                <button class="btn btn-primary" id="btn-list-risk-pairs">列出风险药对</button>
+                            </div>
+                            <div id="risk-pairs-container">
+                                <p class="placeholder-text">点击列出风险药对</p>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="tab-risk-formula">
+                            <div class="mining-controls">
+                                <label>方剂名称:
+                                    <input type="text" id="risk-formula-name" placeholder="输入方剂名...">
+                                </label>
+                                <label>药物列表（逗号分隔）:
+                                    <input type="text" id="risk-formula-herbs" placeholder="如：附子,半夏,瓜蒌,贝母,白及">
+                                </label>
+                                <button class="btn btn-primary" id="btn-assess-formula-risk">评估方剂风险</button>
+                            </div>
+                            <div id="risk-formula-container">
+                                <p class="placeholder-text">输入方剂的组成药物以评估风险</p>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="tab-risk-annotations">
+                            <div class="mining-controls">
+                                <label>最小风险等级:
+                                    <select id="risk-annot-min">
+                                        <option value="低">低及以上</option>
+                                        <option value="中" selected>中及以上</option>
+                                        <option value="高">高及以上</option>
+                                        <option value="极高">仅极高</option>
+                                    </select>
+                                </label>
+                                <button class="btn btn-primary" id="btn-load-risk-annotations">获取风险标注</button>
+                            </div>
+                            <div id="risk-annotations-container">
+                                <p class="placeholder-text">返回风险边列表，可在关联网络图视图中叠加显示</p>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="tab-risk-textmine">
+                            <div class="mining-controls" style="flex-direction:column;align-items:stretch">
+                                <label>输入古代医案/本草文献文本:
+                                    <textarea id="risk-text-input" rows="5" style="width:100%;margin-top:4px;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:13px;resize:vertical" placeholder="如：服后口舌麻木，四肢抽搐，心悸不宁，呕吐不止..."></textarea>
+                                </label>
+                                <label>上下文药物（可选，逗号分隔）:
+                                    <input type="text" id="risk-text-herbs" placeholder="如：附子,半夏,乌头">
+                                </label>
+                                <button class="btn btn-primary" id="btn-mine-adverse-text" style="margin-top:8px">挖掘不良反应</button>
+                            </div>
+                            <div id="risk-textmine-container">
+                                <p class="placeholder-text">输入古代医案或本草文献文本，自动提取不良反应信息</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="view clinical-view" id="view-clinical">
+                    <div class="view-header">
+                        <h2>🏆 现代临床对照试验证据集成</h2>
+                        <p class="view-subtitle">经典古方 vs 现代方案 · 标准Meta分析 + 网络Meta分析</p>
+                    </div>
+                    <div class="clinical-tabs">
+                        <button class="tab-btn active" data-tab="clinical-trials">临床试验库</button>
+                        <button class="tab-btn" data-tab="clinical-meta">标准Meta分析</button>
+                        <button class="tab-btn" data-tab="clinical-nma">网络Meta分析</button>
+                        <button class="tab-btn" data-tab="clinical-summary">适应症综合汇总</button>
+                    </div>
+                    <div class="clinical-content">
+                        <div class="tab-content active" id="tab-clinical-trials">
+                            <div class="mining-controls">
+                                <label>适应症:
+                                    <select id="clinical-indication">
+                                        <option value="感冒">感冒</option>
+                                        <option value="咳嗽">咳嗽</option>
+                                        <option value="胃痛">胃痛</option>
+                                        <option value="失眠">失眠</option>
+                                        <option value="高血压">高血压</option>
+                                        <option value="糖尿病">糖尿病</option>
+                                    </select>
+                                </label>
+                                <label>试验数量:
+                                    <input type="number" id="clinical-trials-n" value="10" min="3" max="50">
+                                </label>
+                                <button class="btn btn-primary" id="btn-load-clinical-trials">加载临床试验</button>
+                            </div>
+                            <div id="clinical-trials-container">
+                                <p class="placeholder-text">选择适应症并加载临床试验数据</p>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="tab-clinical-meta">
+                            <div class="mining-controls">
+                                <label>适应症:
+                                    <select id="meta-indication">
+                                        <option value="感冒">感冒</option>
+                                        <option value="咳嗽">咳嗽</option>
+                                        <option value="胃痛">胃痛</option>
+                                        <option value="失眠">失眠</option>
+                                        <option value="高血压">高血压</option>
+                                        <option value="糖尿病">糖尿病</option>
+                                    </select>
+                                </label>
+                                <button class="btn btn-primary" id="btn-run-meta">执行Meta分析</button>
+                            </div>
+                            <div id="clinical-meta-container">
+                                <p class="placeholder-text">执行Meta分析：经典方 vs 现代方案（SMD合并效应量 + 森林图数据）</p>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="tab-clinical-nma">
+                            <div class="mining-controls">
+                                <label>适应症:
+                                    <select id="nma-indication">
+                                        <option value="感冒">感冒</option>
+                                        <option value="咳嗽">咳嗽</option>
+                                        <option value="胃痛">胃痛</option>
+                                        <option value="失眠">失眠</option>
+                                        <option value="高血压">高血压</option>
+                                        <option value="糖尿病">糖尿病</option>
+                                    </select>
+                                </label>
+                                <button class="btn btn-primary" id="btn-run-nma">运行网络Meta分析</button>
+                            </div>
+                            <div id="clinical-nma-container">
+                                <p class="placeholder-text">网络Meta分析：多治疗方案排序 + 联赛表 + 最佳治疗概率</p>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="tab-clinical-summary">
+                            <div class="mining-controls">
+                                <label>适应症:
+                                    <select id="summary-indication">
+                                        <option value="感冒">感冒</option>
+                                        <option value="咳嗽">咳嗽</option>
+                                        <option value="胃痛">胃痛</option>
+                                        <option value="失眠">失眠</option>
+                                        <option value="高血压">高血压</option>
+                                        <option value="糖尿病">糖尿病</option>
+                                    </select>
+                                </label>
+                                <button class="btn btn-primary" id="btn-load-clinical-summary">加载综合证据</button>
+                            </div>
+                            <div id="clinical-summary-container">
+                                <p class="placeholder-text">汇总：临床试验 + Meta + 网络Meta + 方剂价值排序</p>
                             </div>
                         </div>
                     </div>

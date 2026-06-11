@@ -29,6 +29,9 @@ var HerbNetwork = (function() {
             '大寒': '#1a5276', '微寒': '#5dade2'
         };
         this._init();
+        this.riskEdgeGroup = null;
+        this.riskEdgesVisible = false;
+        this._riskEdgeData = [];
     }
 
     HerbNetwork.prototype._init = function() {
@@ -111,6 +114,7 @@ var HerbNetwork = (function() {
     HerbNetwork.prototype._setupGroups = function() {
         this.g = this.svg.append('g').attr('class', 'graph-group');
         this.linkGroup = this.g.append('g').attr('class', 'links');
+        this.riskEdgeGroup = this.g.append('g').attr('class', 'risk-edges');
         this.nodeGroup = this.g.append('g').attr('class', 'nodes');
         this.labelGroup = this.g.append('g').attr('class', 'labels');
     };
@@ -210,6 +214,7 @@ var HerbNetwork = (function() {
         this.linkGroup.selectAll('*').remove();
         this.nodeGroup.selectAll('*').remove();
         this.labelGroup.selectAll('*').remove();
+        this.riskEdgeGroup.selectAll('*').remove();
 
         this.linkGroup.selectAll('line').data(this.edges).enter().append('line')
             .attr('class', function(d) { return 'link ' + (d.type || ''); })
@@ -283,6 +288,7 @@ var HerbNetwork = (function() {
                 .attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
             node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
             labels.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+            self._updateRiskEdgePositions();
         });
     };
 
@@ -340,6 +346,121 @@ var HerbNetwork = (function() {
     HerbNetwork.prototype.zoomIn = function() { this.svg.transition().duration(300).call(this.zoom.scaleBy, 1.3); };
     HerbNetwork.prototype.zoomOut = function() { this.svg.transition().duration(300).call(this.zoom.scaleBy, 0.7); };
     HerbNetwork.prototype.zoomReset = function() { this.svg.transition().duration(500).call(this.zoom.transform, d3.zoomIdentity); };
+
+    HerbNetwork.prototype.overlayRiskEdges = function(edges) {
+        if (!this.riskEdgeGroup) return;
+        this._riskEdgeData = edges || [];
+        this.riskEdgeGroup.selectAll('*').remove();
+        if (!edges || !edges.length) { this.riskEdgesVisible = false; return; }
+
+        var labelMap = {};
+        for (var i = 0; i < this.nodes.length; i++) {
+            labelMap[this.nodes[i].label] = this.nodes[i];
+        }
+
+        var self = this;
+        var matched = [];
+        for (var j = 0; j < edges.length; j++) {
+            var e = edges[j];
+            var srcNode = labelMap[e.source];
+            var tgtNode = labelMap[e.target];
+            if (srcNode && tgtNode) {
+                matched.push({ edge: e, srcNode: srcNode, tgtNode: tgtNode });
+            }
+        }
+
+        if (!matched.length) { this.riskEdgesVisible = false; return; }
+        this.riskEdgesVisible = true;
+
+        var lines = this.riskEdgeGroup.selectAll('line').data(matched).enter().append('line')
+            .attr('class', 'risk-edge')
+            .attr('stroke', function(d) { return d.edge.stroke || '#ff4444'; })
+            .attr('stroke-width', function(d) { return d.edge.weight ? Math.max(2, Math.min(5, d.edge.weight / 15)) : 3; })
+            .attr('stroke-dasharray', function(d) { return d.edge.dash_array || '8,4'; })
+            .attr('opacity', 0.85)
+            .attr('x1', function(d) { return d.srcNode.x || 0; })
+            .attr('y1', function(d) { return d.srcNode.y || 0; })
+            .attr('x2', function(d) { return d.tgtNode.x || 0; })
+            .attr('y2', function(d) { return d.tgtNode.y || 0; });
+
+        lines.on('mouseover', function(event, d) {
+            d3.select(this).attr('opacity', 1).attr('stroke-width', parseFloat(d3.select(this).attr('stroke-width')) + 1.5);
+            var tip = d.edge.source + ' ↔ ' + d.edge.target +
+                ' | ' + d.edge.label +
+                ' | 风险等级: ' + d.edge.risk_level +
+                ' | 得分: ' + d.edge.risk_score;
+            self._showTooltip(event, tip);
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('opacity', 0.85).attr('stroke-width', function(d) { return d.edge.weight ? Math.max(2, Math.min(5, d.edge.weight / 15)) : 3; });
+            self._hideTooltip();
+        });
+
+        var ann = this.riskEdgeGroup.selectAll('.risk-edge-label').data(matched).enter().append('text')
+            .attr('class', 'risk-edge-label')
+            .text(function(d) { return '⚠ ' + d.edge.label; })
+            .attr('x', function(d) { return ((d.srcNode.x || 0) + (d.tgtNode.x || 0)) / 2; })
+            .attr('y', function(d) { return ((d.srcNode.y || 0) + (d.tgtNode.y || 0)) / 2 - 6; })
+            .attr('font-size', '10px')
+            .attr('fill', function(d) { return d.edge.stroke || '#ff4444'; })
+            .attr('text-anchor', 'middle')
+            .attr('pointer-events', 'none')
+            .attr('opacity', 0.9);
+    };
+
+    HerbNetwork.prototype.clearRiskEdges = function() {
+        if (this.riskEdgeGroup) this.riskEdgeGroup.selectAll('*').remove();
+        this._riskEdgeData = [];
+        this.riskEdgesVisible = false;
+    };
+
+    HerbNetwork.prototype._updateRiskEdgePositions = function() {
+        if (!this.riskEdgesVisible || !this.riskEdgeGroup) return;
+        var labelMap = {};
+        for (var i = 0; i < this.nodes.length; i++) {
+            labelMap[this.nodes[i].label] = this.nodes[i];
+        }
+        this.riskEdgeGroup.selectAll('line.risk-edge').each(function(d) {
+            var srcNode = labelMap[d.edge.source];
+            var tgtNode = labelMap[d.edge.target];
+            if (srcNode) { d3.select(this).attr('x1', srcNode.x).attr('y1', srcNode.y); }
+            if (tgtNode) { d3.select(this).attr('x2', tgtNode.x).attr('y2', tgtNode.y); }
+        });
+        this.riskEdgeGroup.selectAll('text.risk-edge-label').each(function(d) {
+            var srcNode = labelMap[d.edge.source];
+            var tgtNode = labelMap[d.edge.target];
+            if (srcNode && tgtNode) {
+                d3.select(this).attr('x', (srcNode.x + tgtNode.x) / 2).attr('y', (srcNode.y + tgtNode.y) / 2 - 6);
+            }
+        });
+    };
+
+    HerbNetwork.prototype._showTooltip = function(event, text) {
+        var existing = d3.select('#graph-tooltip');
+        if (existing.empty()) {
+            d3.select('body').append('div')
+                .attr('id', 'graph-tooltip')
+                .style('position', 'absolute')
+                .style('background', 'rgba(40,40,40,0.92)')
+                .style('color', '#fff')
+                .style('padding', '6px 12px')
+                .style('border-radius', '5px')
+                .style('font-size', '12px')
+                .style('pointer-events', 'none')
+                .style('z-index', '9999')
+                .style('max-width', '320px')
+                .style('line-height', '1.5');
+        }
+        d3.select('#graph-tooltip')
+            .style('display', 'block')
+            .style('left', (event.pageX + 14) + 'px')
+            .style('top', (event.pageY - 10) + 'px')
+            .html(text);
+    };
+
+    HerbNetwork.prototype._hideTooltip = function() {
+        d3.select('#graph-tooltip').style('display', 'none');
+    };
 
     return HerbNetwork;
 })();

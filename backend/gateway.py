@@ -22,6 +22,7 @@ SERVICE_MAP = {
     "/herbs": f"http://localhost:{settings.formula_loader_port}",
     "/diseases": f"http://localhost:{settings.formula_loader_port}",
     "/import": f"http://localhost:{settings.formula_loader_port}",
+    "/efficacy": f"http://localhost:{settings.formula_loader_port}",
     "/mining": f"http://localhost:{settings.pattern_miner_port}",
     "/discovery": f"http://localhost:{settings.drug_discoverer_port}",
     "/graph": f"http://localhost:{settings.graph_api_port}",
@@ -67,6 +68,12 @@ def root():
     return {
         "name": "中医药方剂配伍规律挖掘系统 (微服务版)",
         "version": "2.0.0",
+        "features_v2": [
+            "方剂疗效量化评估：NLP情感分析+序数回归，0-100评分",
+            "药物剂量-效应关系：限制性立方样条RCS+Meta分析",
+            "方剂不良反应挖掘：十八反十九畏+LD50毒性风险",
+            "现代临床对照试验：标准Meta分析+网络Meta分析"
+        ],
         "services": {
             "formula_loader": f"http://localhost:{settings.formula_loader_port}",
             "pattern_miner": f"http://localhost:{settings.pattern_miner_port}",
@@ -88,10 +95,19 @@ def get_stats():
     formulas_col = get_collection("formulas")
     herbs_col = get_collection("herbs")
     diseases_col = get_collection("diseases")
+    medical_cases_col = get_collection("medical_cases")
+    risk_assessments_col = get_collection("formula_risk_assessments")
+    clinical_trials_col = get_collection("clinical_trials")
     return {
         "formulas_count": formulas_col.count_documents({}),
         "herbs_count": herbs_col.count_documents({}),
-        "diseases_count": diseases_col.count_documents({})
+        "diseases_count": diseases_col.count_documents({}),
+        "v2_modules": {
+            "medical_cases_count": medical_cases_col.count_documents({}),
+            "efficacy_assessed_formulas": formulas_col.count_documents({"efficacy_score": {"$exists": True}}),
+            "risk_assessments_count": risk_assessments_col.count_documents({}),
+            "clinical_trials_count": clinical_trials_col.count_documents({})
+        }
     }
 
 

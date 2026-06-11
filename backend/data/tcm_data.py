@@ -261,3 +261,219 @@ PHARMACOLOGY_TARGETS = [
     "DRD2", "OPRM1", "COX2", "NOS3", "HMGCR", "ACE", "AGTR1", "ADRA1A", "ADRB2", "CHRM1",
     "GABAA", "NMDA", "5-HT1A", "DAT", "SERT", "MAO-B", "COMT", "cGMP", "PKC", "NF-kB",
 ]
+
+EFFICACY_DESCRIPTIONS = {
+    "excellent": [
+        "一剂而愈，诸证悉除",
+        "覆杯即安，效如桴鼓",
+        "药到病除，立竿见影",
+        "三服尽而瘥，神效无比",
+        "一剂知，二剂已",
+        "投之即效，不爽毫厘",
+        "应手而愈，诚良方也",
+        "立起沉疴，霍然而愈",
+    ],
+    "good": [
+        "三日见效，诸证减轻",
+        "五剂而安，渐入坦途",
+        "连服七日，病去八九",
+        "二剂后症减，半月收功",
+        "服药旬日，诸恙悉平",
+        "三诊后好转，月余而愈",
+        "初服有效，坚持收功",
+        "半月后症减十分之七",
+    ],
+    "moderate": [
+        "服药后略有好转，需坚持",
+        "连服两周方见初效",
+        "时好时坏，效果平平",
+        "症减三四，未尽除根",
+        "略有起色，见效缓慢",
+        "月余见微效，需耐心调治",
+    ],
+    "poor": [
+        "连服月余，未见寸效",
+        "药不对证，反增他疾",
+        "屡试不验，证情依旧",
+        "初服似效，久则无功",
+        "服后不适，随即停用",
+    ],
+}
+
+MEDICAL_CASE_TEMPLATES = [
+    "患者{gender}{age}岁，{symptom}。辨证为{syndrome}。投以{formula}，{outcome}。",
+    "{dynasty}某医案：{gender}性{age}岁，{symptom}经年。处以{formula}，{outcome}。",
+    "门诊案例：{gender}{age}，主诉{symptom}，予{formula}加减，{outcome}。",
+    "古籍记载：{gender}{age}得{symptom}之疾，服{formula}，{outcome}。",
+]
+
+SYNDROME_NAMES = [
+    "风寒表实证", "风热表虚证", "肝郁脾虚证", "心脾两虚证", "肝肾阴虚证",
+    "脾肾阳虚证", "气血两虚证", "气滞血瘀证", "痰湿内阻证", "阴虚火旺证",
+    "肺肾阴虚证", "肝胃不和证", "湿热下注证", "寒湿困脾证", "营卫不和证",
+]
+
+TOXIC_HERBS = {
+    "附子": {
+        "toxic_ingredients": ["乌头碱", "次乌头碱", "中乌头碱"],
+        "ld50_mgkg": 1.8,
+        "max_safe_dose_g": 15.0,
+        "pregnancy_risk": "禁用",
+        "contraindications": ["阴虚阳亢证", "孕妇", "实热证"],
+        "adverse_reactions": [
+            {"type": "心脏毒性", "severity": "严重", "symptoms": ["心律失常", "血压下降", "房室传导阻滞"], "frequency": 0.08, "onset_hours": 2.0},
+            {"type": "神经系统毒性", "severity": "中度", "symptoms": ["口舌麻木", "四肢麻木", "流涎"], "frequency": 0.15, "onset_hours": 1.0},
+            {"type": "胃肠道反应", "severity": "轻度", "symptoms": ["恶心", "呕吐", "腹痛"], "frequency": 0.20, "onset_hours": 0.5},
+        ],
+    },
+    "川乌": {
+        "toxic_ingredients": ["乌头碱", "中乌头碱"],
+        "ld50_mgkg": 1.2,
+        "max_safe_dose_g": 9.0,
+        "pregnancy_risk": "禁用",
+        "contraindications": ["孕妇", "阴虚火旺", "严重心脏病"],
+        "adverse_reactions": [
+            {"type": "心脏毒性", "severity": "严重", "symptoms": ["室性早搏", "室颤", "心搏骤停"], "frequency": 0.12, "onset_hours": 1.5},
+            {"type": "神经毒性", "severity": "中度", "symptoms": ["口眼歪斜", "瞳孔散大", "吞咽困难"], "frequency": 0.10, "onset_hours": 1.0},
+        ],
+    },
+    "草乌": {
+        "toxic_ingredients": ["乌头碱", "北草乌碱"],
+        "ld50_mgkg": 0.9,
+        "max_safe_dose_g": 6.0,
+        "pregnancy_risk": "禁用",
+        "contraindications": ["孕妇", "老人", "儿童", "肝肾功能不全"],
+        "adverse_reactions": [
+            {"type": "全身毒性", "severity": "严重", "symptoms": ["呼吸抑制", "休克", "多器官衰竭"], "frequency": 0.05, "onset_hours": 3.0},
+            {"type": "心脏毒性", "severity": "严重", "symptoms": ["QT间期延长", "尖端扭转型室速"], "frequency": 0.08, "onset_hours": 2.0},
+        ],
+    },
+    "马钱子": {
+        "toxic_ingredients": ["士的宁", "马钱子碱"],
+        "ld50_mgkg": 3.27,
+        "max_safe_dose_g": 0.6,
+        "pregnancy_risk": "禁用",
+        "contraindications": ["孕妇", "癫痫史", "高血压"],
+        "adverse_reactions": [
+            {"type": "中枢兴奋", "severity": "严重", "symptoms": ["强直性惊厥", "角弓反张", "牙关紧闭"], "frequency": 0.06, "onset_hours": 1.0},
+            {"type": "肝肾毒性", "severity": "中度", "symptoms": ["ALT升高", "黄疸", "肾功能异常"], "frequency": 0.04, "onset_hours": 72.0},
+        ],
+    },
+    "雷公藤": {
+        "toxic_ingredients": ["雷公藤甲素", "雷公藤内酯醇"],
+        "ld50_mgkg": 0.87,
+        "max_safe_dose_g": 30.0,
+        "pregnancy_risk": "禁用",
+        "contraindications": ["孕妇", "育龄男女", "骨髓抑制"],
+        "adverse_reactions": [
+            {"type": "生殖毒性", "severity": "严重", "symptoms": ["精子减少", "闭经", "卵巢功能衰竭"], "frequency": 0.25, "onset_hours": 240.0},
+            {"type": "骨髓抑制", "severity": "中度", "symptoms": ["白细胞减少", "血小板减少", "贫血"], "frequency": 0.15, "onset_hours": 168.0},
+        ],
+    },
+    "细辛": {
+        "toxic_ingredients": ["黄樟醚", "甲基丁香酚"],
+        "ld50_mgkg": 123.0,
+        "max_safe_dose_g": 3.0,
+        "pregnancy_risk": "慎用",
+        "contraindications": ["气虚多汗", "阴虚阳亢", "肾功能不全"],
+        "adverse_reactions": [
+            {"type": "肝肾毒性", "severity": "中度", "symptoms": ["脂肪肝", "肾曲管坏死"], "frequency": 0.03, "onset_hours": 336.0},
+            {"type": "过敏反应", "severity": "轻度", "symptoms": ["皮疹", "瘙痒"], "frequency": 0.02, "onset_hours": 4.0},
+        ],
+    },
+    "朱砂": {
+        "toxic_ingredients": ["硫化汞", "游离汞"],
+        "ld50_mgkg": 18.0,
+        "max_safe_dose_g": 0.5,
+        "pregnancy_risk": "禁用",
+        "contraindications": ["孕妇", "儿童", "肝肾功能不全"],
+        "adverse_reactions": [
+            {"type": "重金属中毒", "severity": "严重", "symptoms": ["汞中毒脑病", "肾衰", "口腔炎"], "frequency": 0.02, "onset_hours": 720.0},
+        ],
+    },
+    "雄黄": {
+        "toxic_ingredients": ["三氧化二砷", "硫化砷"],
+        "ld50_mgkg": 3.2,
+        "max_safe_dose_g": 0.2,
+        "pregnancy_risk": "禁用",
+        "contraindications": ["孕妇", "儿童", "任何长期用药"],
+        "adverse_reactions": [
+            {"type": "砷中毒", "severity": "严重", "symptoms": ["急性胃肠炎", "休克", "多脏器损伤"], "frequency": 0.04, "onset_hours": 2.0},
+            {"type": "致癌性", "severity": "严重", "symptoms": ["皮肤癌", "肺癌"], "frequency": None, "onset_hours": None},
+        ],
+    },
+    "半夏": {
+        "toxic_ingredients": ["半夏蛋白", "生物碱"],
+        "ld50_mgkg": 325.0,
+        "max_safe_dose_g": 9.0,
+        "pregnancy_risk": "慎用",
+        "contraindications": ["出血证", "阴虚燥咳"],
+        "adverse_reactions": [
+            {"type": "黏膜刺激", "severity": "轻度", "symptoms": ["口腔麻木", "咽喉灼痛"], "frequency": 0.08, "onset_hours": 0.25},
+            {"type": "过敏性紫癜", "severity": "中度", "symptoms": ["皮肤瘀斑", "血尿"], "frequency": 0.01, "onset_hours": 48.0},
+        ],
+    },
+}
+
+HERB_INTERACTION_PAIRS = [
+    {"herb_a": "附子", "herb_b": "半夏", "risk_level": "高", "interaction_type": "十八反", "mechanism": "合用可加重心脏毒性，增加心律失常风险", "evidence_level": "A", "references": ["《神农本草经》", "《本草纲目》", "中华人民共和国药典"]},
+    {"herb_a": "附子", "herb_b": "瓜蒌", "risk_level": "高", "interaction_type": "十八反", "mechanism": "药性相反，可能增强毒性反应", "evidence_level": "A", "references": ["《伤寒论》禁忌", "中药配伍禁忌研究"]},
+    {"herb_a": "附子", "herb_b": "贝母", "risk_level": "高", "interaction_type": "十八反", "mechanism": "反药配伍，毒性叠加，可能抑制呼吸", "evidence_level": "A", "references": ["《本草经集注》", "毒理学报2018"]},
+    {"herb_a": "附子", "herb_b": "白及", "risk_level": "高", "interaction_type": "十八反", "mechanism": "乌头反白及，加重黏膜刺激", "evidence_level": "B", "references": ["历代本草文献"]},
+    {"herb_a": "甘草", "herb_b": "甘遂", "risk_level": "高", "interaction_type": "十八反", "mechanism": "甘草反甘遂，增强肠道刺激及电解质紊乱", "evidence_level": "A", "references": ["《金匮要略》", "药理学报2020"]},
+    {"herb_a": "甘草", "herb_b": "大戟", "risk_level": "高", "interaction_type": "十八反", "mechanism": "相反配伍，严重泻下及肾功能损伤", "evidence_level": "A", "references": ["中华本草"]},
+    {"herb_a": "甘草", "herb_b": "芫花", "risk_level": "高", "interaction_type": "十八反", "mechanism": "反药同用，可致剧烈腹泻脱水", "evidence_level": "A", "references": ["传统配伍禁忌"]},
+    {"herb_a": "甘草", "herb_b": "海藻", "risk_level": "中", "interaction_type": "十八反", "mechanism": "现代研究争议，仍建议避免合用", "evidence_level": "C", "references": ["近年临床观察"]},
+    {"herb_a": "藜芦", "herb_b": "人参", "risk_level": "高", "interaction_type": "十八反", "mechanism": "藜芦反人参，抵消人参补益作用并增毒", "evidence_level": "A", "references": ["《儒门事亲》"]},
+    {"herb_a": "藜芦", "herb_b": "细辛", "risk_level": "高", "interaction_type": "十八反", "mechanism": "毒性叠加，神经系统抑制", "evidence_level": "A", "references": ["中药七情"]},
+    {"herb_a": "丁香", "herb_b": "郁金", "risk_level": "中", "interaction_type": "十九畏", "mechanism": "丁香畏郁金，降低药效，刺激胃肠", "evidence_level": "B", "references": ["《医经小学》"]},
+    {"herb_a": "硫黄", "herb_b": "朴硝", "risk_level": "高", "interaction_type": "十九畏", "mechanism": "配伍致剧烈泻下及电解质紊乱", "evidence_level": "B", "references": ["配伍忌宜"]},
+    {"herb_a": "水银", "herb_b": "砒霜", "risk_level": "极高", "interaction_type": "十九畏", "mechanism": "双重金属中毒，多器官衰竭致死", "evidence_level": "A", "references": ["剧毒药物管理"]},
+    {"herb_a": "狼毒", "herb_b": "密陀僧", "risk_level": "高", "interaction_type": "十九畏", "mechanism": "增强肝肾毒性及神经毒性", "evidence_level": "B", "references": ["历代经验"]},
+    {"herb_a": "巴豆", "herb_b": "牵牛子", "risk_level": "高", "interaction_type": "十九畏", "mechanism": "强烈泻下，脱水休克风险", "evidence_level": "B", "references": ["临床配伍禁忌"]},
+    {"herb_a": "川乌", "herb_b": "犀角", "risk_level": "中", "interaction_type": "十九畏", "mechanism": "川乌畏犀角，影响药效", "evidence_level": "C", "references": ["古法禁忌"]},
+    {"herb_a": "草乌", "herb_b": "麻黄", "risk_level": "中", "interaction_type": "药理拮抗/协同", "mechanism": "合用可兴奋过度，心悸失眠", "evidence_level": "D", "references": ["临床观察"]},
+    {"herb_a": "马钱子", "herb_b": "麝香", "risk_level": "高", "interaction_type": "药理协同增毒", "mechanism": "麝香促进马钱子吸收，增强中枢毒性", "evidence_level": "B", "references": ["药代动力学研究"]},
+]
+
+CLINICAL_TRIAL_MODERN_TREATMENTS = {
+    "感冒": [
+        {"name": "复方氨酚烷胺", "type": "现代西药", "typical_efficacy": 0.72, "se": 0.08, "ae_rate": 0.15},
+        {"name": "奥司他韦", "type": "抗病毒西药", "typical_efficacy": 0.78, "se": 0.06, "ae_rate": 0.10},
+        {"name": "布洛芬缓释", "type": "解热镇痛", "typical_efficacy": 0.65, "se": 0.09, "ae_rate": 0.12},
+    ],
+    "咳嗽": [
+        {"name": "氨溴索口服液", "type": "祛痰西药", "typical_efficacy": 0.70, "se": 0.07, "ae_rate": 0.08},
+        {"name": "右美沙芬", "type": "镇咳西药", "typical_efficacy": 0.68, "se": 0.08, "ae_rate": 0.06},
+        {"name": "孟鲁司特钠", "type": "白三烯拮抗", "typical_efficacy": 0.62, "se": 0.09, "ae_rate": 0.05},
+    ],
+    "胃痛": [
+        {"name": "奥美拉唑", "type": "质子泵抑制", "typical_efficacy": 0.82, "se": 0.05, "ae_rate": 0.07},
+        {"name": "雷贝拉唑", "type": "质子泵抑制", "typical_efficacy": 0.80, "se": 0.06, "ae_rate": 0.06},
+        {"name": "铝碳酸镁", "type": "胃黏膜保护", "typical_efficacy": 0.68, "se": 0.08, "ae_rate": 0.04},
+    ],
+    "失眠": [
+        {"name": "艾司唑仑", "type": "苯二氮卓类", "typical_efficacy": 0.75, "se": 0.07, "ae_rate": 0.18},
+        {"name": "佐匹克隆", "type": "非苯二氮卓", "typical_efficacy": 0.77, "se": 0.06, "ae_rate": 0.12},
+        {"name": "褪黑素", "type": "保健品", "typical_efficacy": 0.55, "se": 0.10, "ae_rate": 0.03},
+    ],
+    "高血压": [
+        {"name": "氨氯地平", "type": "CCB钙拮抗剂", "typical_efficacy": 0.78, "se": 0.06, "ae_rate": 0.10},
+        {"name": "缬沙坦", "type": "ARB受体拮抗", "typical_efficacy": 0.80, "se": 0.05, "ae_rate": 0.06},
+        {"name": "美托洛尔", "type": "β受体阻断", "typical_efficacy": 0.72, "se": 0.07, "ae_rate": 0.09},
+    ],
+    "糖尿病": [
+        {"name": "二甲双胍", "type": "双胍类降糖", "typical_efficacy": 0.75, "se": 0.06, "ae_rate": 0.15},
+        {"name": "格列美脲", "type": "磺脲类", "typical_efficacy": 0.70, "se": 0.08, "ae_rate": 0.12},
+        {"name": "达格列净", "type": "SGLT2抑制", "typical_efficacy": 0.78, "se": 0.05, "ae_rate": 0.08},
+    ],
+}
+
+CLASSICAL_FORMULAS_BY_DISEASE = {
+    "感冒": ["麻黄汤", "桂枝汤", "小柴胡汤", "银翘散", "桑菊饮"],
+    "咳嗽": ["止嗽散", "二陈汤", "麻杏石甘汤", "清燥救肺汤", "百合固金汤"],
+    "胃痛": ["四君子汤", "理中丸", "香砂六君子汤", "半夏泻心汤", "黄芪建中汤"],
+    "失眠": ["酸枣仁汤", "天王补心丹", "朱砂安神丸", "交泰丸", "归脾汤"],
+    "高血压": ["天麻钩藤饮", "镇肝熄风汤", "半夏白术天麻汤", "龙胆泻肝汤", "六味地黄丸"],
+    "糖尿病": ["六味地黄丸", "金匮肾气丸", "玉泉丸", "玉女煎", "消渴方"],
+}

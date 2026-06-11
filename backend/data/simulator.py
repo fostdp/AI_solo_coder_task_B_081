@@ -348,29 +348,211 @@ def run_simulation(num_formulas=5000, num_targets=100, seed=42,
 
     print("[模拟器] MongoDB数据导入完成")
 
+    print("[模拟器] v2.0 - 生成医案疗效数据...")
+    from services.efficacy_scorer import MedicalCaseGenerator, EfficacyAggregator
+    from services.adverse_reaction import FormulaRiskAssessor
+    from services.clinical_trial import ClinicalTrialSimulator
+    from tcm_data import (
+        TOXIC_HERBS, HERB_INTERACTION_PAIRS,
+        CLINICAL_TRIAL_MODERN_TREATMENTS, CLASSICAL_FORMULAS_BY_DISEASE,
+    )
+
+    cases_col = get_collection("medical_cases")
+    efficacy_col = get_collection("formula_efficacies")
+    trials_col = get_collection("clinical_trials")
+    risk_col = get_collection("formula_risks")
+
+    if clear_before:
+        cases_col.delete_many({})
+        efficacy_col.delete_many({})
+        trials_col.delete_many({})
+        risk_col.delete_many({})
+
+    case_gen = MedicalCaseGenerator(seed=seed)
+    trial_sim = ClinicalTrialSimulator(seed=seed + 1)
+
+    all_cases = []
+    all_efficacies = []
+    all_risks = []
+    cursor = formulas_col.find({})
+    for idx, form in enumerate(cursor):
+        herb_names = []
+        for h in form.get("herbs", []):
+            if isinstance(h, dict):
+                herb_names.append(h.get("name", ""))
+            else:
+                herb_names.append(str(h))
+        cases = case_gen.generate_cases_for_formula(
+            form["name"], form.get("dynasty", "宋代"),
+            form.get("indications", []), n=12
+        )
+        all_cases.extend(cases)
+        agg = EfficacyAggregator.aggregate(cases)
+        agg["_id"] = ObjectId()
+        agg["formula_id"] = form["_id"]
+        agg["indications"] = form.get("indications", [])
+        all_efficacies.append(agg)
+        if any(h in TOXIC_HERBS for h in herb_names) or len(herb_names) >= 6:
+            risk = FormulaRiskAssessor.assess(form["name"], herb_names)
+            risk["_id"] = ObjectId()
+            risk["formula_id"] = form["_id"]
+            all_risks.append(risk)
+        if len(all_cases) >= 5000:
+            cases_col.insert_many(all_cases)
+            all_cases = []
+        if len(all_efficacies) >= 500:
+            efficacy_col.insert_many(all_efficacies)
+            all_efficacies = []
+        if len(all_risks) >= 300:
+            risk_col.insert_many(all_risks)
+            all_risks = []
+        if idx and idx % 1000 == 0:
+            print(f"  处理疗效数据 {idx}/{num_formulas}...")
+
+    if all_cases:
+        cases_col.insert_many(all_cases)
+    if all_efficacies:
+        efficacy_col.insert_many(all_efficacies)
+    if all_risks:
+        risk_col.insert_many(all_risks)
+    total_cases = cases_col.estimated_document_count()
+    total_efficacies = efficacy_col.estimated_document_count()
+    total_risks = risk_col.estimated_document_count()
+    print(f"[模拟器] v2.0 - 疗效数据: {total_cases} 条医案, {total_efficacies} 个方剂疗效档案, {total_risks} 个风险评估")
+
+    efficacy_col.create_index([("formula_name", 1)], unique=True)
+    efficacy_col.create_index([("avg_efficacy_score", -1)])
+    efficacy_col.create_index([("total_cases", -1)])
+    cases_col.create_index([("formula_name", 1)])
+    cases_col.create_index([("efficacy_grade", 1)])
+    risk_col.create_index([("formula_name", 1)], unique=True)
+    risk_col.create_index([("overall_risk_score", -1)])
+    risk_col.create_index([("overall_risk_level", 1)])
+
+    print("[模拟器] v2.0 - 生成现代临床试验模拟数据...")
+    all_trials = []
+    for indication in list(CLINICAL_TRIAL_MODERN_TREATMENTS.keys()):
+        t_list = trial_sim.generate_trials(indication, n_trials=15)
+        for t in t_list:
+            t["_id"] = ObjectId()
+            t["indication"] = indication
+            all_trials.append(t)
+    if all_trials:
+        trials_col.insert_many(all_trials)
+        trials_col.create_index([("indication", 1)])
+        trials_col.create_index([("year", -1)])
+        trials_col.create_index([("trial_id", 1)], unique=True)
+        trials_col.create_index([("quality_score", -1)])
+    total_trials = trials_col.estimated_document_count()
+    total_patients = trials_col.aggregate([
+        {"$group": {"_id": None, "s": {"$sum": "$total_sample_size"}}}
+    ])
+    total_patients = list(total_patients)[0]["s"] if True else 0
+    print(f"[模拟器] v2.0 - 临床试验数据: {total_trials} 个RCT, {total_patients} 个受试者")
+
+    print("[模拟器] v2.0 - 为方剂文档附加疗效与风险字段冗余...")
+    cursor2 = efficacy_col.find({}, {"formula_name": 1, "avg_efficacy_score": 1,
+                                     "avg_days_to_effect": 1, "efficacy_grade_distribution": 1})
+    for e in cursor2:
+        formulas_col.update_one(
+            {"name": e["formula_name"]},
+            {"$set": {
+                "efficacy_score": e["avg_efficacy_score"],
+                "efficacy_days": e["avg_days_to_effect"],
+                "efficacy_grade_dist": e["efficacy_grade_distribution"],
+            }}
+        )
+    cursor3 = risk_col.find({}, {"formula_name": 1, "overall_risk_score": 1,
+                                 "overall_risk_level": 1, "warnings": 1})
+    for r in cursor3:
+        formulas_col.update_one(
+            {"name": r["formula_name"]},
+            {"$set": {
+                "risk_score": r["overall_risk_score"],
+                "risk_level": r["overall_risk_level"],
+                "risk_warnings": r["warnings"],
+            }}
+        )
+
     if import_neo4j_flag:
         print("[模拟器] 导入Neo4j图数据库...")
         import_neo4j_data()
+        print("[模拟器] v2.0 - 在Neo4j中附加风险边...")
+        try:
+            from database.neo4j_db import run_query
+            risk_pairs = list(risk_col.aggregate([
+                {"$unwind": "$risk_pairs"},
+                {"$project": {"a": "$risk_pairs.herb_a", "b": "$risk_pairs.herb_b",
+                              "level": "$risk_pairs.risk_level",
+                              "score": "$risk_pairs.risk_score",
+                              "type": "$risk_pairs.interaction_type"}}
+            ]))
+            deduped = {}
+            for p in risk_pairs:
+                k = tuple(sorted([p["a"], p["b"]]))
+                if k not in deduped or p["score"] > deduped[k]["score"]:
+                    deduped[k] = p
+            batch = []
+            for p in deduped.values():
+                batch.append({
+                    "ha": p["a"], "hb": p["b"], "rl": p["level"],
+                    "sc": p["score"], "tp": p["type"]
+                })
+                if len(batch) >= 100:
+                    run_query("""
+                    UNWIND $batch AS r
+                    MATCH (a:Herb {name: r.ha}), (b:Herb {name: r.hb})
+                    MERGE (a)-[rel:HAS_RISK_WITH]->(b)
+                    SET rel.risk_level = r.rl, rel.risk_score = r.sc,
+                        rel.interaction_type = r.tp, rel.source = 'TCM v2.0'
+                    """, {"batch": batch})
+                    batch = []
+            if batch:
+                run_query("""
+                UNWIND $batch AS r
+                MATCH (a:Herb {name: r.ha}), (b:Herb {name: r.hb})
+                MERGE (a)-[rel:HAS_RISK_WITH]->(b)
+                SET rel.risk_level = r.rl, rel.risk_score = r.sc,
+                    rel.interaction_type = r.tp, rel.source = 'TCM v2.0'
+                """, {"batch": batch})
+            print(f"[模拟器] v2.0 - 写入 {len(deduped)} 条风险关系 HAS_RISK_WITH")
+        except Exception as ex:
+            print(f"[模拟器] v2.0 - 写入Neo4j风险边失败(非致命): {ex}")
 
     print("[模拟器] 清除Redis缓存...")
     cache_delete(RedisChannels.FORMULA_TRANSACTIONS)
     cache_delete(RedisChannels.GRAPH_NETWORK)
-    publish(RedisChannels.FORMULA_UPDATED, {"action": "full_import", "count": num_formulas})
+    publish(RedisChannels.FORMULA_UPDATED, {"action": "full_import_v2", "count": num_formulas})
 
     dynasty_counts = formulas_col.aggregate([
         {"$group": {"_id": "$dynasty", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}}
     ])
 
-    print("\n[模拟器] ========== 生成统计 ==========")
+    risk_level_counts = risk_col.aggregate([
+        {"$group": {"_id": "$overall_risk_level", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ])
+    rlc = list(risk_level_counts)
+
+    print("\n[模拟器] ========== 生成统计 (v2.0) ==========")
     print(f"总方剂数: {num_formulas}")
     print(f"中药数: {len(HERBS_DATA)}")
     print(f"病症数: {len(DISEASES_DATA)}")
     print(f"靶点数据: {len(target_docs)} 味药 × 2-15个靶点")
+    print(f"医案疗效记录: {total_cases} 条")
+    print(f"方剂疗效档案: {total_efficacies} 个")
+    print(f"临床试验: {total_trials} 个RCT / {total_patients} 受试者")
+    print(f"风险评估档案: {total_risks} 个")
+    if rlc:
+        print("风险等级分布:")
+        for r in rlc:
+            print(f"  {r['_id']}: {r['count']} 个方剂")
+    print(f"毒性中药库: {len(TOXIC_HERBS)} 味 / 风险药对库: {len(HERB_INTERACTION_PAIRS)} 对")
     print("\n按朝代分布:")
     for dc in dynasty_counts:
         print(f"  {dc['_id']}: {dc['count']} 首 ({dc['count']/num_formulas*100:.1f}%)")
-    print("[模拟器] 完成！")
+    print("[模拟器] 完成！(v2.0 疗效/风险/临床模块已激活)")
 
     return {
         "formulas": num_formulas,

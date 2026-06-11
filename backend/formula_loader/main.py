@@ -16,11 +16,13 @@ from formula_loader.routes_formulas import router as formulas_router
 from formula_loader.routes_herbs import router as herbs_router
 from formula_loader.routes_diseases import router as diseases_router
 from formula_loader.routes_import import router as import_router
+from api.efficacy import router as efficacy_router
 
 app.include_router(formulas_router)
 app.include_router(herbs_router)
 app.include_router(diseases_router)
 app.include_router(import_router)
+app.include_router(efficacy_router)
 
 
 @app.get("/health")
