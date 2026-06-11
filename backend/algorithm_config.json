@@ -1,0 +1,41 @@
+{
+  "fp_growth": {
+    "min_support": 0.05,
+    "min_confidence": 0.3,
+    "min_lift": 1.0,
+    "max_itemset_length": 3,
+    "top_pairs_n": 20,
+    "top_triplets_n": 20
+  },
+  "louvain": {
+    "resolution": 1.0,
+    "random_state": 42,
+    "partition_size": 100,
+    "min_co_occurrence": 5,
+    "refine_max_iterations": 5,
+    "incremental_max_iterations": 3
+  },
+  "link_prediction": {
+    "default_method": "adamic_adar",
+    "top_n": 50,
+    "combined_weights": {
+      "adamic_adar": 0.4,
+      "jaccard": 0.3,
+      "target_similarity": 0.3
+    }
+  },
+  "graph": {
+    "aggregation_threshold": 150,
+    "worker_node_threshold": 50,
+    "default_limit_per_type": 50,
+    "co_occurs_limit": 100
+  },
+  "formula_search": {
+    "text_index_weights": {
+      "name": 10,
+      "indications": 5,
+      "source": 1
+    },
+    "default_language": "none"
+  }
+}

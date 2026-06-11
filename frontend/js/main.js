@@ -22,12 +22,12 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initGraph() {
-    graphVis = new GraphVisualization('#graph-svg', '#graph-canvas');
+    graphVis = new HerbNetwork('#graph-svg', '#graph-canvas');
     window.graphVis = graphVis;
 }
 
 function initPanel() {
-    panelManager = new PanelManager('#detail-panel');
+    panelManager = new FormulaDetail('#detail-panel');
     window.panelManager = panelManager;
 }
 
