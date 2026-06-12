@@ -4,7 +4,7 @@ import random
 from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict, Counter
 
-from ..data.tcm_data import (
+from data.tcm_data import (
     EFFICACY_DESCRIPTIONS,
     MEDICAL_CASE_TEMPLATES,
     SYNDROME_NAMES,
@@ -17,7 +17,7 @@ class TCMSentimentAnalyzer:
         "愈": 0.9, "瘥": 0.85, "安": 0.8, "除": 0.85, "已": 0.75,
         "立": 0.3, "即": 0.2, "神": 0.4, "良": 0.35, "桴鼓": 0.8,
         "减": 0.5, "轻": 0.45, "平": 0.55, "霍然": 0.85, "应手": 0.8,
-        "见效": 0.6, "好转": 0.55, "起色": 0.5, "收功": 0.7,
+        "见效": 0.55, "好转": 0.45, "起色": 0.4, "收功": 0.65,
         "投之即效": 0.85, "效如": 0.9, "立起": 0.85, "不爽": 0.3,
         "爽": 0.25, "颇效": 0.7, "甚效": 0.8, "大效": 0.85,
         "痊愈": 0.92, "康复": 0.85, "根治": 0.88, "全消": 0.90,
@@ -27,6 +27,7 @@ class TCMSentimentAnalyzer:
         "通利": 0.55, "和调": 0.50, "复常": 0.75, "安和": 0.65,
         "诸恙悉平": 0.85, "病去八九": 0.75, "渐入坦途": 0.65,
         "药到病除": 0.90, "覆杯即安": 0.92, "一剂知": 0.80,
+        "有效": 0.55, "极效": 0.85, "渐平": 0.35,
     }
 
     NEGATIVE_KEYWORDS = {
@@ -63,24 +64,41 @@ class TCMSentimentAnalyzer:
     def compute_sentiment(cls, text: str) -> float:
         score = 0.0
         matched = 0
+        matched_positions = set()
+
+        all_keywords = []
         for kw, w in cls.POSITIVE_KEYWORDS.items():
-            if kw in text:
+            all_keywords.append((kw, w, "pos"))
+        for kw, w in cls.NEGATIVE_KEYWORDS.items():
+            all_keywords.append((kw, w, "neg"))
+
+        all_keywords.sort(key=lambda x: -len(x[0]))
+
+        for kw, w, ktype in all_keywords:
+            if kw not in text:
+                continue
+            idx = text.find(kw)
+            positions = set(range(idx, idx + len(kw)))
+            if positions & matched_positions:
+                continue
+            matched_positions |= positions
+
+            if ktype == "pos":
                 modifier = 1.0
                 for intensifier, mult in cls.INTENSIFIERS.items():
                     if intensifier + kw in text:
                         modifier = mult
                         break
                 for neg in cls.NEGATION_PREFIXES:
-                    idx = text.find(kw)
-                    if idx > 0 and text[idx - 1] == neg:
+                    idx_p = text.find(kw)
+                    if idx_p > 0 and text[idx_p - 1] == neg:
                         modifier = -0.8
                         break
                 score += w * modifier
-                matched += 1
-        for kw, w in cls.NEGATIVE_KEYWORDS.items():
-            if kw in text:
+            else:
                 score += w
-                matched += 1
+            matched += 1
+
         if matched == 0:
             return 0.0
         return max(-1.0, min(1.0, score / max(matched, 1) * 1.2))
@@ -95,17 +113,17 @@ class TCMSentimentAnalyzer:
 
 class OrdinalRegressionScorer:
 
-    GRADE_THRESHOLDS = [-0.3, 0.1, 0.4, 0.7]
+    GRADE_THRESHOLDS = [-0.3, 0.2, 0.55, 0.80]
     GRADE_LABELS = ["无效", "一般", "良好", "优秀", "神效"]
 
     @classmethod
     def predict_grade(cls, sentiment: float, days: Optional[int]) -> Tuple[int, float]:
         base_score = sentiment
         if days is not None:
-            time_weight = max(0.0, 1.0 - math.log1p(days) / 6.0)
-            base_score = sentiment * 0.55 + (0.45 if sentiment > 0 else -0.45) * time_weight
+            time_weight = max(0.0, 1.0 - math.log1p(days) / 4.5)
+            base_score = sentiment * 0.65 + (0.35 if sentiment > 0 else -0.35) * time_weight
         else:
-            base_score = sentiment * 0.7
+            base_score = sentiment * 0.75
         grade = 0
         for i, t in enumerate(cls.GRADE_THRESHOLDS):
             if base_score > t:

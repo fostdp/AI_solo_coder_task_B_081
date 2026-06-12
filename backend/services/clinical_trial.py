@@ -3,7 +3,7 @@ import random
 from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict
 
-from ..data.tcm_data import (
+from data.tcm_data import (
     CLINICAL_TRIAL_MODERN_TREATMENTS,
     CLASSICAL_FORMULAS_BY_DISEASE,
 )
@@ -36,6 +36,8 @@ class ClinicalTrialSimulator:
     def generate_trials(self, indication: str, n_trials: int = 8) -> List[Dict[str, Any]]:
         modern = CLINICAL_TRIAL_MODERN_TREATMENTS.get(indication, [])
         classics = CLASSICAL_FORMULAS_BY_DISEASE.get(indication, [])
+        if not modern and not classics:
+            return []
         all_treatments = []
         for t in modern:
             all_treatments.append({**t, "category": "现代方案"})
@@ -55,14 +57,18 @@ class ClinicalTrialSimulator:
             year = self.rng.randint(*self.YEAR_RANGE)
             design = self.rng.choice(self.DESIGNS)
             use_classic = self.rng.random() < 0.55
-            if use_classic and classics:
-                trt_classic = self.rng.choice([t for t in all_treatments if t["category"] == "古代经典方"])
-                trt_comp = self.rng.choice([t for t in all_treatments if t["category"] == "现代方案"])
-                arms = [trt_classic, trt_comp]
+            classic_arms = [t for t in all_treatments if t["category"] == "古代经典方"]
+            modern_arms = [t for t in all_treatments if t["category"] == "现代方案"]
+            if use_classic and classic_arms and modern_arms:
+                arms = [self.rng.choice(classic_arms), self.rng.choice(modern_arms)]
+            elif len(all_treatments) >= 2:
+                arms = self.rng.sample(all_treatments, k=2)
+            elif all_treatments:
+                arms = [all_treatments[0]]
             else:
-                arms = self.rng.sample(modern, k=min(2, len(modern)))
+                continue
             total_n = self.rng.randint(60, 260)
-            arm_n = total_n // len(arms)
+            arm_n = total_n // max(len(arms), 1)
             trial_arms = []
             for arm in arms:
                 noise = self.rng.gauss(0, arm["se"] * 0.5)
@@ -229,6 +235,8 @@ class NetworkMetaAnalysis:
                         "n_j": t["arms"][j]["sample_size"],
                         "eff_i": t["arms"][i]["mean_efficacy"],
                         "eff_j": t["arms"][j]["mean_efficacy"],
+                        "name_i": t["arms"][i]["treatment_name"],
+                        "name_j": t["arms"][j]["treatment_name"],
                     })
         treatments = sorted(treatments)
         n = len(treatments)
@@ -276,7 +284,7 @@ class NetworkMetaAnalysis:
                     diff = 0.0
                     nc = 0
                     for c in edges.get(key, []):
-                        if c[0] == t1:
+                        if c["name_i"] == t1:
                             diff += c["eff_i"] - c["eff_j"]
                         else:
                             diff += c["eff_j"] - c["eff_i"]

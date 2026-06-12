@@ -326,6 +326,18 @@ TOXIC_HERBS = {
             {"type": "胃肠道反应", "severity": "轻度", "symptoms": ["恶心", "呕吐", "腹痛"], "frequency": 0.20, "onset_hours": 0.5},
         ],
     },
+    "乌头": {
+        "toxic_ingredients": ["乌头碱", "中乌头碱", "次乌头碱"],
+        "ld50_mgkg": 1.2,
+        "max_safe_dose_g": 3.0,
+        "pregnancy_risk": "禁用",
+        "contraindications": ["孕妇", "阴虚火旺", "严重心脏病", "肝肾功能不全"],
+        "adverse_reactions": [
+            {"type": "心脏毒性", "severity": "严重", "symptoms": ["室性心律失常", "血压骤降", "心搏骤停"], "frequency": 0.10, "onset_hours": 1.0},
+            {"type": "神经毒性", "severity": "中度", "symptoms": ["口舌麻木", "四肢痉挛", "瞳孔散大"], "frequency": 0.12, "onset_hours": 0.5},
+            {"type": "胃肠道反应", "severity": "中度", "symptoms": ["剧烈呕吐", "腹痛腹泻", "脱水"], "frequency": 0.18, "onset_hours": 0.5},
+        ],
+    },
     "川乌": {
         "toxic_ingredients": ["乌头碱", "中乌头碱"],
         "ld50_mgkg": 1.2,
@@ -417,15 +429,19 @@ TOXIC_HERBS = {
 
 HERB_INTERACTION_PAIRS = [
     {"herb_a": "附子", "herb_b": "半夏", "risk_level": "高", "interaction_type": "十八反", "mechanism": "合用可加重心脏毒性，增加心律失常风险", "evidence_level": "A", "references": ["《神农本草经》", "《本草纲目》", "中华人民共和国药典"]},
+    {"herb_a": "乌头", "herb_b": "半夏", "risk_level": "高", "interaction_type": "十八反", "mechanism": "半蒌贝蔹芨攻乌，合用可致严重心脏毒性及黏膜刺激", "evidence_level": "A", "references": ["《本草经集注》", "十八反歌诀"]},
     {"herb_a": "附子", "herb_b": "瓜蒌", "risk_level": "高", "interaction_type": "十八反", "mechanism": "药性相反，可能增强毒性反应", "evidence_level": "A", "references": ["《伤寒论》禁忌", "中药配伍禁忌研究"]},
     {"herb_a": "附子", "herb_b": "贝母", "risk_level": "高", "interaction_type": "十八反", "mechanism": "反药配伍，毒性叠加，可能抑制呼吸", "evidence_level": "A", "references": ["《本草经集注》", "毒理学报2018"]},
     {"herb_a": "附子", "herb_b": "白及", "risk_level": "高", "interaction_type": "十八反", "mechanism": "乌头反白及，加重黏膜刺激", "evidence_level": "B", "references": ["历代本草文献"]},
+    {"herb_a": "乌头", "herb_b": "瓜蒌", "risk_level": "高", "interaction_type": "十八反", "mechanism": "乌头类与瓜蒌相反，增强毒性", "evidence_level": "A", "references": ["十八反经典记载"]},
+    {"herb_a": "乌头", "herb_b": "贝母", "risk_level": "高", "interaction_type": "十八反", "mechanism": "反药配伍，加重呼吸抑制风险", "evidence_level": "A", "references": ["《本草纲目》"]},
     {"herb_a": "甘草", "herb_b": "甘遂", "risk_level": "高", "interaction_type": "十八反", "mechanism": "甘草反甘遂，增强肠道刺激及电解质紊乱", "evidence_level": "A", "references": ["《金匮要略》", "药理学报2020"]},
     {"herb_a": "甘草", "herb_b": "大戟", "risk_level": "高", "interaction_type": "十八反", "mechanism": "相反配伍，严重泻下及肾功能损伤", "evidence_level": "A", "references": ["中华本草"]},
     {"herb_a": "甘草", "herb_b": "芫花", "risk_level": "高", "interaction_type": "十八反", "mechanism": "反药同用，可致剧烈腹泻脱水", "evidence_level": "A", "references": ["传统配伍禁忌"]},
     {"herb_a": "甘草", "herb_b": "海藻", "risk_level": "中", "interaction_type": "十八反", "mechanism": "现代研究争议，仍建议避免合用", "evidence_level": "C", "references": ["近年临床观察"]},
     {"herb_a": "藜芦", "herb_b": "人参", "risk_level": "高", "interaction_type": "十八反", "mechanism": "藜芦反人参，抵消人参补益作用并增毒", "evidence_level": "A", "references": ["《儒门事亲》"]},
     {"herb_a": "藜芦", "herb_b": "细辛", "risk_level": "高", "interaction_type": "十八反", "mechanism": "毒性叠加，神经系统抑制", "evidence_level": "A", "references": ["中药七情"]},
+    {"herb_a": "人参", "herb_b": "五灵脂", "risk_level": "中", "interaction_type": "十九畏", "mechanism": "人参畏五灵脂，减弱补气功效，部分研究示无拮抗", "evidence_level": "B", "references": ["《医经小学》十九畏歌诀"]},
     {"herb_a": "丁香", "herb_b": "郁金", "risk_level": "中", "interaction_type": "十九畏", "mechanism": "丁香畏郁金，降低药效，刺激胃肠", "evidence_level": "B", "references": ["《医经小学》"]},
     {"herb_a": "硫黄", "herb_b": "朴硝", "risk_level": "高", "interaction_type": "十九畏", "mechanism": "配伍致剧烈泻下及电解质紊乱", "evidence_level": "B", "references": ["配伍忌宜"]},
     {"herb_a": "水银", "herb_b": "砒霜", "risk_level": "极高", "interaction_type": "十九畏", "mechanism": "双重金属中毒，多器官衰竭致死", "evidence_level": "A", "references": ["剧毒药物管理"]},

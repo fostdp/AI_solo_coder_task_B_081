@@ -3,7 +3,7 @@ import math
 from typing import List, Dict, Any, Tuple, Optional
 from collections import defaultdict, Counter
 
-from ..data.tcm_data import TOXIC_HERBS, HERB_INTERACTION_PAIRS
+from data.tcm_data import TOXIC_HERBS, HERB_INTERACTION_PAIRS
 
 
 class AdverseReactionExtractor:
@@ -50,11 +50,14 @@ class AdverseReactionExtractor:
             profile = TOXIC_HERBS.get(h)
             if profile:
                 for ar in profile.get("adverse_reactions", []):
-                    all_reactions.append({
+                    reaction_entry = {
                         "herb": h,
+                        "reaction_type": ar.get("type", ar.get("reaction_type", "未知")),
+                        "severity": ar.get("severity", "轻度"),
                         **ar,
-                    })
-                    severity_counts[ar.get("severity", "轻度")] += 1
+                    }
+                    all_reactions.append(reaction_entry)
+                    severity_counts[reaction_entry["severity"]] += 1
         by_type = defaultdict(list)
         for r in all_reactions:
             by_type[r["reaction_type"]].append(r)
@@ -177,8 +180,10 @@ class FormulaRiskAssessor:
         else:
             max_pair_risk = 0.0
         toxic_ratio = sum(1 for h in herbs if h in TOXIC_HERBS) / max(len(herbs), 1)
+        toxic_count = sum(1 for h in herbs if h in TOXIC_HERBS)
+        toxic_bonus = min(0.3, toxic_count * 0.12)
         over_dose_factor = len(dose_warnings) * 0.15
-        overall_score = min(1.0, 0.4 * max_pair_risk + 0.4 * toxic_ratio + 0.2 * over_dose_factor)
+        overall_score = min(1.0, 0.3 * max_pair_risk + 0.35 * toxic_ratio + 0.15 * toxic_bonus + 0.2 * over_dose_factor)
         if overall_score >= 0.7:
             level = "极高"
         elif overall_score >= 0.5:
