@@ -11,6 +11,79 @@ from data.tcm_data import (
 )
 
 
+class SentimentUncertaintyEstimator:
+
+    @staticmethod
+    def keyword_entropy(matched_keywords: List[Tuple[str, float, str]]) -> float:
+        if not matched_keywords:
+            return 1.0
+        pos_sum = sum(abs(w) for _, w, t in matched_keywords if t == "pos")
+        neg_sum = sum(abs(w) for _, w, t in matched_keywords if t == "neg")
+        total = pos_sum + neg_sum
+        if total == 0:
+            return 1.0
+        p_pos = pos_sum / total
+        p_neg = neg_sum / total
+        entropy = 0.0
+        if p_pos > 0:
+            entropy -= p_pos * math.log2(p_pos)
+        if p_neg > 0:
+            entropy -= p_neg * math.log2(p_neg)
+        return entropy
+
+    @staticmethod
+    def confidence_from_matches(n_matches: int, text_length: int) -> float:
+        if n_matches == 0:
+            return 0.0
+        density = min(1.0, n_matches / max(text_length / 3, 1))
+        match_conf = 1.0 - math.exp(-n_matches / 2.0)
+        return 0.6 * match_conf + 0.4 * density
+
+    @staticmethod
+    def overall_uncertainty(matched_keywords: List[Tuple[str, float, str]],
+                               text_length: int) -> Dict[str, Any]:
+        n = len(matched_keywords)
+        if n == 0:
+            return {
+                "entropy": 1.0,
+                "sparsity_penalty": 1.0,
+                "weight_variance": 0.0,
+                "ambiguity_level": "高",
+                "confidence": 0.0,
+                "needs_review": True,
+            }
+
+        entropy = SentimentUncertaintyEstimator.keyword_entropy(matched_keywords)
+        density_conf = SentimentUncertaintyEstimator.confidence_from_matches(n, text_length)
+
+        weight_variance = 0.0
+        if n > 1:
+            weights = [abs(w) for _, w, _ in matched_keywords]
+            mean_w = sum(weights) / n
+            variance = sum((w - mean_w) ** 2 for w in weights) / n
+            weight_variance = min(1.0, math.sqrt(variance))
+
+        sparsity_penalty = 1.0 - density_conf
+        ambiguity = 0.4 * entropy + 0.35 * sparsity_penalty + 0.25 * weight_variance
+
+        overall_conf = max(0.0, 1.0 - ambiguity)
+
+        level = "高"
+        if overall_conf > 0.7:
+            level = "低"
+        elif overall_conf > 0.45:
+            level = "中"
+
+        return {
+            "entropy": round(entropy, 4),
+            "sparsity_penalty": round(sparsity_penalty, 4),
+            "weight_variance": round(weight_variance, 4),
+            "ambiguity_level": level,
+            "confidence": round(overall_conf, 4),
+            "needs_review": overall_conf < 0.5 or n <= 1,
+        }
+
+
 class TCMSentimentAnalyzer:
 
     POSITIVE_KEYWORDS = {
@@ -104,6 +177,76 @@ class TCMSentimentAnalyzer:
         return max(-1.0, min(1.0, score / max(matched, 1) * 1.2))
 
     @classmethod
+    def analyze_with_uncertainty(cls, text: str) -> Dict[str, Any]:
+        matched_keywords: List[Tuple[str, float, str]] = []
+        matched_positions = set()
+        score = 0.0
+        matched_count = 0
+
+        all_keywords = []
+        for kw, w in cls.POSITIVE_KEYWORDS.items():
+            all_keywords.append((kw, w, "pos"))
+        for kw, w in cls.NEGATIVE_KEYWORDS.items():
+            all_keywords.append((kw, w, "neg"))
+        all_keywords.sort(key=lambda x: -len(x[0]))
+
+        for kw, w, ktype in all_keywords:
+            if kw not in text:
+                continue
+            idx = text.find(kw)
+            positions = set(range(idx, idx + len(kw)))
+            if positions & matched_positions:
+                continue
+            matched_positions |= positions
+
+            effective_w = w
+            if ktype == "pos":
+                modifier = 1.0
+                for intensifier, mult in cls.INTENSIFIERS.items():
+                    if intensifier + kw in text:
+                        modifier = mult
+                        break
+                for neg in cls.NEGATION_PREFIXES:
+                    idx_p = text.find(kw)
+                    if idx_p > 0 and text[idx_p - 1] == neg:
+                        modifier = -0.8
+                        break
+                effective_w = w * modifier
+                score += effective_w
+            else:
+                score += w
+            matched_count += 1
+            matched_keywords.append((kw, effective_w, ktype))
+
+        sentiment = 0.0
+        if matched_count > 0:
+            sentiment = max(-1.0, min(1.0, score / max(matched_count, 1) * 1.2))
+
+        uncertainty = SentimentUncertaintyEstimator.overall_uncertainty(
+            matched_keywords, len(text)
+        )
+
+        return {
+            "sentiment_score": round(sentiment, 4),
+            "matched_keywords": [
+                {"keyword": kw, "weight": round(w, 4), "type": t}
+                for kw, w, t in matched_keywords
+            ],
+            "match_count": matched_count,
+            "entropy": uncertainty["entropy"],
+            "sparsity_penalty": uncertainty["sparsity_penalty"],
+            "weight_variance": uncertainty["weight_variance"],
+            "ambiguity_level": uncertainty["ambiguity_level"],
+            "match_confidence": round(
+                SentimentUncertaintyEstimator.confidence_from_matches(
+                    matched_count, len(text)
+                ), 4
+            ),
+            "overall_confidence": uncertainty["confidence"],
+            "needs_human_review": uncertainty["needs_review"],
+        }
+
+    @classmethod
     def extract_days(cls, text: str) -> Optional[int]:
         for pat, d in cls.TIME_PATTERNS:
             if re.search(pat, text):
@@ -130,6 +273,119 @@ class OrdinalRegressionScorer:
                 grade = i + 1
         normalized = max(0.0, min(100.0, (base_score + 1.0) * 50.0))
         return grade, round(normalized, 2)
+
+    @classmethod
+    def predict_with_uncertainty(cls, sentiment: float, days: Optional[int],
+                                 sentiment_confidence: float = 1.0) -> Dict[str, Any]:
+        grade, score = cls.predict_grade(sentiment, days)
+        base_score = (score / 100.0) * 2.0 - 1.0
+
+        grade_probs = []
+        for g in range(5):
+            if g == 0:
+                lower = -1.0
+                upper = cls.GRADE_THRESHOLDS[0]
+            elif g < 4:
+                lower = cls.GRADE_THRESHOLDS[g - 1]
+                upper = cls.GRADE_THRESHOLDS[g]
+            else:
+                lower = cls.GRADE_THRESHOLDS[3]
+                upper = 1.0
+            mid = (lower + upper) / 2
+            width = upper - lower
+            dist = abs(base_score - mid)
+            prob = max(0.01, 1.0 - dist / width) * sentiment_confidence
+            grade_probs.append(prob)
+
+        total = sum(grade_probs)
+        if total > 0:
+            grade_probs = [p / total for p in grade_probs]
+
+        top2 = sorted(range(5), key=lambda g: -grade_probs[g])[:2]
+        margin = grade_probs[top2[0]] - grade_probs[top2[1]]
+
+        uncertainty_score = 0.4 * (1.0 - margin) + 0.6 * (1.0 - sentiment_confidence)
+
+        uncertainty = "高"
+        if uncertainty_score < 0.25:
+            uncertainty = "低"
+        elif uncertainty_score < 0.45:
+            uncertainty = "中"
+
+        return {
+            "grade": grade,
+            "grade_label": cls.GRADE_LABELS[grade],
+            "score": score,
+            "base_score": round(base_score, 4),
+            "grade_probabilities": [
+                {"grade": i, "label": cls.GRADE_LABELS[i], "probability": round(p, 4)}
+                for i, p in enumerate(grade_probs)
+            ],
+            "top2_grades": [cls.GRADE_LABELS[g] for g in top2],
+            "confidence_margin": round(margin, 4),
+            "uncertainty_level": uncertainty,
+            "needs_human_review": uncertainty == "高" or sentiment_confidence < 0.5,
+        }
+
+
+class HumanAnnotationManager:
+
+    def __init__(self):
+        self.annotations: Dict[str, Dict[str, Any]] = {}
+        self.review_queue: List[Dict[str, Any]] = []
+
+    def submit_for_review(self, case_id: str, text: str,
+                          auto_grade: int, auto_score: float,
+                          uncertainty: str, reason: str = "") -> Dict[str, Any]:
+        item = {
+            "case_id": case_id,
+            "text": text,
+            "auto_grade": auto_grade,
+            "auto_score": auto_score,
+            "uncertainty": uncertainty,
+            "reason": reason,
+            "status": "pending",
+            "submitted_at": __import__("time").time(),
+        }
+        self.review_queue.append(item)
+        return item
+
+    def annotate(self, case_id: str, human_grade: int, human_score: float,
+                 annotator: str = "", notes: str = "") -> Optional[Dict[str, Any]]:
+        if case_id not in self.annotations:
+            self.annotations[case_id] = {"history": []}
+        record = {
+            "case_id": case_id,
+            "human_grade": human_grade,
+            "human_score": human_score,
+            "annotator": annotator,
+            "notes": notes,
+            "timestamp": __import__("time").time(),
+        }
+        self.annotations[case_id]["history"].append(record)
+        self.annotations[case_id]["latest"] = record
+        for item in self.review_queue:
+            if item["case_id"] == case_id:
+                item["status"] = "reviewed"
+        return record
+
+    def get_pending_count(self) -> int:
+        return sum(1 for item in self.review_queue if item["status"] == "pending")
+
+    def get_annotation_stats(self) -> Dict[str, Any]:
+        if not self.annotations:
+            return {"total": 0, "pending": self.get_pending_count()}
+        grades = [a["latest"]["human_grade"] for a in self.annotations.values()
+                  if a.get("latest")]
+        return {
+            "total_annotated": len(self.annotations),
+            "pending_review": self.get_pending_count(),
+            "grade_distribution": dict(Counter(grades)),
+            "avg_human_score": round(
+                sum(a["latest"]["human_score"] for a in self.annotations.values()
+                    if a.get("latest")) / len(self.annotations), 2
+            ) if self.annotations else 0.0,
+        }
 
 
 class MedicalCaseGenerator:

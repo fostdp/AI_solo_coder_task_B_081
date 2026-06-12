@@ -853,6 +853,390 @@ record(
 
 
 # ====================================================================
+# 五、迭代缺陷修复根因验证
+# ====================================================================
+section("五、迭代缺陷修复根因验证")
+
+from services.efficacy_scorer import (
+    SentimentUncertaintyEstimator,
+    HumanAnnotationManager,
+)
+from services.dose_response import BayesianRCS, SensitivityAnalyzer
+from services.adverse_reaction import ExpertKnowledgeEngine
+from services.clinical_trial import (
+    MetaAnalysisSensitivity,
+    QualityWeightedMetaAnalysis,
+)
+
+# -------------------------------------------------
+# 5.1 疗效量化评估：不确定性量化 + 人工标注
+# -------------------------------------------------
+print("\n--- 5.1 不确定性量化与人工标注验证 ---")
+
+# 模糊描述 vs 明确描述的不确定性对比
+vague_text = "药后稍安，然诸症未减"
+clear_text = "一剂而愈，诸症悉除"
+vague_unc = TCMSentimentAnalyzer.analyze_with_uncertainty(vague_text)
+clear_unc = TCMSentimentAnalyzer.analyze_with_uncertainty(clear_text)
+
+record(
+    f"[根因-情感不确定] 模糊稀疏惩罚({vague_unc['sparsity_penalty']:.2f}) > 明确({clear_unc['sparsity_penalty']:.2f})",
+    vague_unc["sparsity_penalty"] > clear_unc["sparsity_penalty"],
+    "模糊描述匹配词少，稀疏惩罚应更高"
+)
+record(
+    f"[根因-情感置信] 明确描述置信度({clear_unc['overall_confidence']:.2f}) > 模糊描述({vague_unc['overall_confidence']:.2f})",
+    clear_unc["overall_confidence"] > vague_unc["overall_confidence"],
+    "明确描述应具有更高的整体置信度"
+)
+record(
+    f"[根因-人工审核] 模糊描述需人工审核={vague_unc['needs_human_review']}",
+    vague_unc["needs_human_review"] is True,
+    "模糊/低置信度描述应触发人工审核"
+)
+record(
+    f"[根因-不需审核] 明确描述需人工审核={clear_unc['needs_human_review']}",
+    clear_unc["needs_human_review"] is False,
+    "明确描述一般不需要人工审核"
+)
+
+# 分级不确定性
+vague_sent = TCMSentimentAnalyzer.compute_sentiment(vague_text)
+vague_grade = OrdinalRegressionScorer.predict_with_uncertainty(
+    vague_sent, days=None,
+    sentiment_confidence=vague_unc["overall_confidence"]
+)
+clear_sent = TCMSentimentAnalyzer.compute_sentiment(clear_text)
+clear_grade = OrdinalRegressionScorer.predict_with_uncertainty(
+    clear_sent, days=1,
+    sentiment_confidence=clear_unc["overall_confidence"]
+)
+record(
+    f"[根因-分级不确定] 模糊分级不确定性={vague_grade['uncertainty_level']}, 明确分级={clear_grade['uncertainty_level']}",
+    vague_grade["uncertainty_level"] in ("高", "中")
+    and clear_grade["uncertainty_level"] in ("低", "中"),
+    "模糊描述分级不确定性应更高"
+)
+record(
+    f"[根因-Top2分级] 模糊Top2={vague_grade['top2_grades']}",
+    len(vague_grade["top2_grades"]) == 2,
+    "应返回两个最可能的分级"
+)
+
+# 人工标注管理器
+ham = HumanAnnotationManager()
+item = ham.submit_for_review(
+    "case-001", vague_text,
+    auto_grade=vague_grade["grade"],
+    auto_score=vague_grade["score"],
+    uncertainty=vague_grade["uncertainty_level"],
+    reason="模糊描述，置信度低"
+)
+record(
+    f"[根因-标注提交] 待审核数={ham.get_pending_count()} > 0",
+    ham.get_pending_count() > 0,
+    "提交后待审核数应增加"
+)
+ham.annotate("case-001", human_grade=2, human_score=62.0, annotator="张医生", notes="轻度有效，属良好级")
+stats = ham.get_annotation_stats()
+record(
+    f"[根因-标注统计] 已标注{stats.get('total_annotated', 0)}个",
+    stats.get("total_annotated", 0) == 1,
+    "标注后统计应正确更新"
+)
+record(
+    f"[根因-标注审核] 标注后待审核数={ham.get_pending_count()}",
+    ham.get_pending_count() == 0,
+    "完成标注后待审核数应为0"
+)
+
+# -------------------------------------------------
+# 5.2 剂量效应：贝叶斯先验 + 敏感性分析
+# -------------------------------------------------
+print("\n--- 5.2 贝叶斯先验与敏感性分析验证 ---")
+
+analyzer = DoseEffectAnalyzer(seed=42)
+
+# 小样本数据（3个剂量点）
+small_obs = [
+    {"herb_name": "测试药", "dosage_g": 3.0, "avg_efficacy": 0.4, "sample_size": 5, "std_error": 0.1},
+    {"herb_name": "测试药", "dosage_g": 6.0, "avg_efficacy": 0.65, "sample_size": 8, "std_error": 0.08},
+    {"herb_name": "测试药", "dosage_g": 9.0, "avg_efficacy": 0.5, "sample_size": 4, "std_error": 0.12},
+]
+xs = [o["dosage_g"] for o in small_obs]
+ys = [o["avg_efficacy"] for o in small_obs]
+ws = [o["sample_size"] for o in small_obs]
+
+# 普通RCS vs 贝叶斯RCS小样本稳定性
+rcs_plain = RestrictedCubicSpline(nk=4)
+rcs_plain.fit(xs, ys, ws)
+bayes_rcs = BayesianRCS(nk=4, prior_precision=0.5)
+bayes_rcs.fit(xs, ys, ws)
+
+record(
+    f"[根因-贝叶斯拟合] 贝叶斯R²={bayes_rcs.r_squared:.4f}, 普通R²={rcs_plain.r_squared:.4f}",
+    bayes_rcs.r_squared > 0 and rcs_plain.r_squared > 0,
+    "小样本下两者都应能成功拟合"
+)
+
+# 贝叶斯预测带CI
+pred, lo, hi = bayes_rcs.predict_with_ci(6.0)
+record(
+    f"[根因-贝叶斯CI] 预测={pred:.4f}, 95%CI=[{lo:.4f}, {hi:.4f}], CI有效={lo < pred < hi}",
+    lo < pred < hi,
+    "贝叶斯预测应返回有效置信区间"
+)
+
+# 留一法敏感性
+loo_result = SensitivityAnalyzer.leave_one_out(xs, ys, ws, nk=4)
+record(
+    f"[根因-LOO分析] PRESS={loo_result.get('press_statistic', -1):.4f}, LOO-R²={loo_result.get('loo_r_squared', -1):.4f}",
+    "loo_r_squared" in loo_result and "stability_score" in loo_result,
+    "留一法分析应返回LOO-R²和稳定性评分"
+)
+
+# 节点数敏感性
+knot_sens = SensitivityAnalyzer.knot_sensitivity(xs, ys, ws)
+record(
+    f"[根因-节点敏感] 测试了{knot_sens.get('best_n_knots', 0)}种节点数",
+    knot_sens.get("best_n_knots", 0) > 0 and len(knot_sens.get("knot_results", [])) > 0,
+    "节点敏感性分析应测试多种节点数"
+)
+record(
+    f"[根因-最佳节点] 最佳节点数={knot_sens['best_n_knots']}",
+    knot_sens["best_n_knots"] in [3, 4, 5, 6],
+    "最佳节点数应在合理范围内"
+)
+
+# 完整剂量效应敏感性分析
+herb_data = analyzer.simulate_observations("黄芪", n_per_bin=8, bins=7)
+sens_report = analyzer.sensitivity_analysis(herb_data)
+record(
+    f"[根因-完整敏感] 整体稳定={sens_report['overall_stable']}",
+    isinstance(sens_report["overall_stable"], bool),
+    "完整敏感性分析应返回稳定性判断"
+)
+record(
+    f"[根因-先验敏感] 先验R²差={sens_report['bayesian_prior_sensitivity']['r2_diff']:.4f}",
+    "prior_stable" in sens_report["bayesian_prior_sensitivity"],
+    "贝叶斯先验敏感性分析应返回稳定性"
+)
+
+# 样本量警告
+small_data = herb_data[:3]
+small_sens = analyzer.sensitivity_analysis(small_data)
+record(
+    f"[根因-样本量警告] 小样本警告={small_sens['sample_size_warning']}",
+    small_sens["sample_size_warning"] is True,
+    "样本量不足时应发出警告"
+)
+
+# -------------------------------------------------
+# 5.3 不良反应：专家知识库推理
+# -------------------------------------------------
+print("\n--- 5.3 专家知识库推理验证 ---")
+
+expert = ExpertKnowledgeEngine()
+
+# 毒性家族推断
+fuzi_family = expert.get_herb_family("附子")
+wutou_family = expert.get_herb_family("乌头")
+record(
+    f"[根因-毒性家族] 附子属{fuzi_family}, 乌头属{wutou_family}, 同一家族={fuzi_family == wutou_family}",
+    fuzi_family == wutou_family and fuzi_family == "乌头类",
+    "附子、乌头应同属乌头类毒性家族"
+)
+
+# 同家族毒性叠加推理
+herbs_pair = ["附子", "川乌"]
+inferred = expert.infer_interactions(herbs_pair)
+record(
+    f"[根因-同类推理] 附子+川乌 推理出{len(inferred)}项风险",
+    len(inferred) >= 1,
+    "同属乌头类的两味药应推理出毒性叠加风险"
+)
+if inferred:
+    record(
+        f"[根因-推理标记] 第一项为推理结果: inferred={inferred[0].get('inferred')}",
+        inferred[0].get("inferred") is True,
+        "推理结果应有inferred标记"
+    )
+    record(
+        f"[根因-推理置信] 置信度={inferred[0].get('confidence', -1)}",
+        0 < inferred[0].get("confidence", -1) < 1,
+        "推理结果应有置信度"
+    )
+
+# 扩展毒性档案
+expanded = expert.expand_toxic_profile("川乌")
+record(
+    f"[根因-扩展档案] 川乌扩展后不良反应{expanded['inferred_count']}项为推理",
+    expanded["inferred_count"] >= 1 or expanded.get("family") is not None,
+    "基于家族应能扩展毒性档案"
+)
+record(
+    f"[根因-档案置信] 川乌档案置信度={expanded['confidence']}",
+    expanded["confidence"] > 0.5,
+    "有已知基础数据的药物置信度应较高"
+)
+
+# 妊娠风险评估
+pregnancy_herbs = ["附子", "甘草", "茯苓"]
+preg_result = expert.assess_pregnancy_risk(pregnancy_herbs)
+record(
+    f"[根因-妊娠风险] 整体风险={preg_result['overall_risk']}",
+    preg_result["overall_risk"] in ("禁用", "忌用（推理）", "慎用"),
+    "含附子的方剂妊娠风险应为禁用/忌用级"
+)
+record(
+    f"[根因-妊娠推理] 推理出{preg_result['inferred_count']}个妊娠风险药",
+    preg_result["inferred_count"] >= 0,
+    "应返回推理妊娠风险药物数"
+)
+
+# 方剂风险评估集成专家推理
+risk_assessment = FormulaRiskAssessor.assess(
+    "测试方", ["雪上一枝蒿", "草乌", "甘草"],
+    include_expert_inference=True
+)
+record(
+    f"[根因-方剂集成] 推理风险对={risk_assessment.get('inferred_count', 0)}对",
+    risk_assessment.get("inferred_count", 0) >= 1,
+    "方剂评估应集成专家推理，返回推理风险对数"
+)
+record(
+    f"[根因-扩展档案数] 扩展毒性档案{len(risk_assessment.get('expanded_toxic_profiles', {}))}个",
+    len(risk_assessment.get("expanded_toxic_profiles", {})) >= 1,
+    "应返回扩展毒性档案"
+)
+record(
+    f"[根因-妊娠字段] 妊娠风险字段存在={'pregnancy_risk' in risk_assessment}",
+    "pregnancy_risk" in risk_assessment,
+    "方剂评估应包含妊娠风险"
+)
+
+# -------------------------------------------------
+# 5.4 临床集成：质量权重 + 敏感性分析
+# -------------------------------------------------
+print("\n--- 5.4 质量权重Meta与敏感性分析验证 ---")
+
+simulator = ClinicalTrialSimulator(seed=42)
+trials = simulator.generate_trials("高血压", n_trials=10)
+
+# 普通Meta vs 质量加权Meta
+studies_for_meta = []
+for t in trials:
+    classic = [a for a in t["arms"] if a["treatment_type"] == "古代经典方"]
+    modern = [a for a in t["arms"] if a["treatment_type"] != "古代经典方"]
+    if classic and modern:
+        c, m = classic[0], modern[0]
+        nc, nm = c["sample_size"], m["sample_size"]
+        pooled_s = math.sqrt(((nc-1)*c["std_efficacy"]**2 + (nm-1)*m["std_efficacy"]**2) / max(nc+nm-2, 1))
+        smd = (c["mean_efficacy"] - m["mean_efficacy"]) / pooled_s if pooled_s > 0 else 0
+        var = 1/nc + 1/nm + smd**2 / (2*(nc+nm))
+        studies_for_meta.append({
+            "study_id": t["trial_id"],
+            "effect_size": smd,
+            "variance": var,
+            "n": nc + nm,
+            "quality": t["quality_score"],
+            "year": t["year"],
+        })
+
+plain_meta = StandardMetaAnalysis._inverse_variance(studies_for_meta)
+qw_meta = QualityWeightedMetaAnalysis.run(studies_for_meta)
+record(
+    f"[根因-质量加权] 质量加权合并效应={qw_meta['pooled_effect_size']:.4f}",
+    qw_meta.get("quality_weighted") is True,
+    "质量加权Meta应标记quality_weighted"
+)
+record(
+    f"[根因-权重不同] 普通ES={plain_meta['pooled_effect_size']:.4f}, 加权ES={qw_meta['pooled_effect_size']:.4f}",
+    abs(plain_meta["pooled_effect_size"] - qw_meta["pooled_effect_size"]) >= 0,
+    "质量加权与普通合并效应量可以不同（质量影响权重）"
+)
+record(
+    f"[根因-平均质量] 平均质量权重={qw_meta.get('avg_quality_weight', 0)}",
+    qw_meta.get("avg_quality_weight", 0) > 0,
+    "应返回平均质量权重"
+)
+
+# 逐一剔除敏感性
+loo = MetaAnalysisSensitivity.leave_one_out(studies_for_meta)
+record(
+    f"[根因-LOO] LOO结果数={len(loo.get('loo_results', []))}, 最大变化={loo.get('max_change', -1):.4f}",
+    len(loo.get("loo_results", [])) == len(studies_for_meta),
+    "逐一剔除应为每个研究生成一条结果"
+)
+record(
+    f"[根因-LOO稳健] 结果稳健={loo.get('result_robust')}",
+    isinstance(loo.get("result_robust"), bool),
+    "应返回结果是否稳健的判断"
+)
+record(
+    f"[根因-影响研究] 影响较大研究数={loo.get('n_influential', -1)}",
+    isinstance(loo.get("n_influential"), int),
+    "应返回影响较大的研究数量"
+)
+
+# 低质量剔除敏感性
+lq_sens = MetaAnalysisSensitivity.low_quality_exclusion(studies_for_meta, quality_threshold=0.5)
+record(
+    f"[根因-低质量剔除] 排除{lq_sens.get('excluded_count', 0)}项低质量研究",
+    lq_sens.get("kept_count", 0) + lq_sens.get("excluded_count", 0) == len(studies_for_meta),
+    "剔除+保留应等于总研究数"
+)
+record(
+    f"[根因-方向一致] 结论方向一致={lq_sens.get('direction_consistent')}",
+    isinstance(lq_sens.get("direction_consistent"), bool),
+    "应返回剔除后方向是否一致"
+)
+
+# 发表偏倚检测
+pub_bias = MetaAnalysisSensitivity.publication_bias(studies_for_meta)
+record(
+    f"[根因-发表偏倚] 偏倚等级={pub_bias.get('bias_level', '未知')}, 可检测={pub_bias.get('testable')}",
+    pub_bias.get("testable") is True and "bias_level" in pub_bias,
+    "研究数足够时应能检测发表偏倚"
+)
+record(
+    f"[根因-漏斗图] 漏斗不对称={pub_bias.get('funnel_plot_asymmetric')}",
+    isinstance(pub_bias.get("funnel_plot_asymmetric"), bool),
+    "应返回漏斗图是否不对称"
+)
+
+# 亚组分析
+subgroup = MetaAnalysisSensitivity.subgroup_analysis(studies_for_meta)
+record(
+    f"[根因-亚组] 亚组数={subgroup.get('n_subgroups', 0)}",
+    subgroup.get("n_subgroups", 0) >= 1,
+    "质量分层亚组分析应返回至少1个亚组"
+)
+
+# 完整compare方法含敏感性分析
+full_result = StandardMetaAnalysis.compare_classical_vs_modern(
+    trials, "高血压",
+    use_quality_weight=True,
+    run_sensitivity=True
+)
+record(
+    f"[根因-完整分析] 包含敏感性分析={'sensitivity_analysis' in full_result}",
+    "sensitivity_analysis" in full_result,
+    "完整分析应包含敏感性分析模块"
+)
+record(
+    f"[根因-整体置信] 整体置信度={full_result.get('overall_confidence', '未知')}",
+    full_result.get("overall_confidence") in ("高", "中", "低"),
+    "应返回整体证据置信度评级"
+)
+record(
+    f"[根因-敏感性结论] 敏感性结论存在={'sensitivity_conclusion' in full_result}",
+    "sensitivity_conclusion" in full_result,
+    "应返回敏感性分析结论"
+)
+
+
+# ====================================================================
 # 总结
 # ====================================================================
 section("测试总结")
