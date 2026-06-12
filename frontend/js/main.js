@@ -18,10 +18,10 @@ document.addEventListener('DOMContentLoaded', () => {
     initDiseaseView();
     initMiningView();
     initDiscoveryView();
-    initEfficacyView();
-    initDoseView();
-    initRiskView();
-    initClinicalView();
+    EfficacyScorer.init();
+    DoseResponseModeler.init();
+    AdverseEventMiner.init();
+    ClinicalTrialIntegrator.init();
     loadInitialData();
 });
 

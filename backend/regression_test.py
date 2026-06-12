@@ -141,11 +141,17 @@ print("\n--- 7. Gateway导入测试 ---")
 try:
     from gateway import app as gateway_app, SERVICE_MAP
     test("gateway app导入", True)
-    test("SERVICE_MAP配置", len(SERVICE_MAP) == 7)
+    test("SERVICE_MAP配置", len(SERVICE_MAP) >= 10)
     test("formulas→formula_loader", SERVICE_MAP.get("/formulas", "").endswith(":8001"))
     test("mining→pattern_miner", SERVICE_MAP.get("/mining", "").endswith(":8002"))
     test("discovery→drug_discoverer", SERVICE_MAP.get("/discovery", "").endswith(":8003"))
     test("graph→graph_api", SERVICE_MAP.get("/graph", "").endswith(":8004"))
+    test("efficacy/scorer→efficacy_scorer", SERVICE_MAP.get("/efficacy/scorer", "").endswith(":8005"))
+    test("efficacy/dose-response→dose_response_modeler", SERVICE_MAP.get("/efficacy/dose-response", "").endswith(":8006"))
+    test("efficacy/adverse-events→adverse_event_miner", SERVICE_MAP.get("/efficacy/adverse-events", "").endswith(":8007"))
+    test("efficacy/clinical→clinical_trial_integrator", SERVICE_MAP.get("/efficacy/clinical", "").endswith(":8008"))
+    test("meta-analysis→meta_analysis_service", SERVICE_MAP.get("/meta-analysis", "").endswith(":8009"))
+    test("text-mining→text_mining_worker", SERVICE_MAP.get("/text-mining", "").endswith(":8010"))
 except Exception as e:
     test("gateway app导入", False, str(e))
 
@@ -243,6 +249,14 @@ try:
 except Exception as e:
     test("前端文件拆分验证", False, str(e))
 
+print("\n--- 12b. 前端V2组件JS文件验证 ---")
+try:
+    frontend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend", "js")
+    for js_file in ["efficacy_scorer.js", "dose_response_modeler.js", "adverse_event_miner.js", "clinical_trial_integrator.js"]:
+        test(f"{js_file}存在", os.path.exists(os.path.join(frontend_dir, js_file)))
+except Exception as e:
+    test("前端V2组件JS文件验证", False, str(e))
+
 print("\n--- 13. 服务端口配置测试 ---")
 try:
     settings = get_settings()
@@ -253,6 +267,134 @@ try:
     test("gateway端口", settings.gateway_port == 8000)
 except Exception as e:
     test("服务端口配置", False, str(e))
+
+print("\n--- 14. Efficacy Scorer服务导入测试 ---")
+try:
+    from efficacy_scorer.main import app as es_app
+    test("efficacy_scorer app导入", True)
+    routes = [r.path for r in es_app.routes]
+    test("efficacy/analyze路由存在", any("/efficacy/analyze" in r for r in routes))
+    test("efficacy/grade路由存在", any("/efficacy/grade" in r for r in routes))
+    test("efficacy/evaluate路由存在", any("/efficacy/evaluate" in r for r in routes))
+except Exception as e:
+    test("efficacy_scorer app导入", False, str(e))
+
+try:
+    from efficacy_scorer.scorer import TCMSentimentAnalyzer, OrdinalRegressionScorer, EfficacyAggregator
+    test("TCMSentimentAnalyzer导入", True)
+    sent = TCMSentimentAnalyzer.compute_sentiment("一剂而愈")
+    test("TCM情感分析阳性", sent > 0)
+    grade, score = OrdinalRegressionScorer.predict_grade(sent, 1)
+    test("序数回归分级", 0 <= grade <= 4)
+except Exception as e:
+    test("efficacy_scorer算法导入", False, str(e))
+
+print("\n--- 15. Dose Response Modeler服务导入测试 ---")
+try:
+    from dose_response_modeler.main import app as drm_app
+    test("dose_response_modeler app导入", True)
+except Exception as e:
+    test("dose_response_modeler app导入", False, str(e))
+
+try:
+    from dose_response_modeler.modeler import RestrictedCubicSpline, DoseEffectAnalyzer, BayesianRCS, SensitivityAnalyzer
+    test("RCS算法导入", True)
+    rcs = RestrictedCubicSpline(nk=4)
+    xs = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+    ys = [2.0 * x + 1.0 for x in xs]
+    rcs.fit(xs, ys)
+    test("RCS拟合", rcs.r_squared > 0.5)
+    analyzer = DoseEffectAnalyzer(seed=42)
+    obs = analyzer.simulate_observations("麻黄", n_per_bin=8, bins=7)
+    test("剂量效应模拟", len(obs) > 0)
+except Exception as e:
+    test("dose_response_modeler算法导入", False, str(e))
+
+print("\n--- 16. Adverse Event Miner服务导入测试 ---")
+try:
+    from adverse_event_miner.main import app as aem_app
+    test("adverse_event_miner app导入", True)
+except Exception as e:
+    test("adverse_event_miner app导入", False, str(e))
+
+try:
+    from adverse_event_miner.miner import ExpertKnowledgeEngine, AdverseReactionExtractor, RiskPairDetector, FormulaRiskAssessor
+    test("ExpertKnowledgeEngine导入", True)
+    expert = ExpertKnowledgeEngine()
+    fam = expert.get_herb_family("附子")
+    test("毒性家族查询", fam == "乌头类")
+    rx = AdverseReactionExtractor.extract_from_text("患者出现恶心呕吐")
+    test("不良反应文本提取", len(rx) > 0)
+except Exception as e:
+    test("adverse_event_miner算法导入", False, str(e))
+
+print("\n--- 17. Clinical Trial Integrator服务导入测试 ---")
+try:
+    from clinical_trial_integrator.main import app as cti_app
+    test("clinical_trial_integrator app导入", True)
+except Exception as e:
+    test("clinical_trial_integrator app导入", False, str(e))
+
+try:
+    from clinical_trial_integrator.integrator import ClinicalTrialSimulator, StandardMetaAnalysis, NetworkMetaAnalysis
+    test("ClinicalTrialSimulator导入", True)
+    sim = ClinicalTrialSimulator(seed=42)
+    trials = sim.generate_trials("感冒", n_trials=3)
+    test("临床试验模拟", len(trials) > 0)
+except Exception as e:
+    test("clinical_trial_integrator算法导入", False, str(e))
+
+print("\n--- 18. Meta Analysis Service导入测试 ---")
+try:
+    from meta_analysis_service.main import app as mas_app
+    test("meta_analysis_service app导入", True)
+except Exception as e:
+    test("meta_analysis_service app导入", False, str(e))
+
+try:
+    from meta_analysis_service.calculator import StandardMetaCalculator, NetworkMetaCalculator
+    test("StandardMetaCalculator导入", True)
+    studies = [
+        {"study_id": "S1", "effect_size": 0.5, "variance": 0.02, "n": 100, "quality": 0.7},
+        {"study_id": "S2", "effect_size": 0.6, "variance": 0.015, "n": 120, "quality": 0.8},
+        {"study_id": "S3", "effect_size": 0.45, "variance": 0.025, "n": 80, "quality": 0.6},
+    ]
+    result = StandardMetaCalculator.run_standard_ma(studies)
+    test("标准Meta分析计算", "pooled_effect_size" in result and "ci_95" in result)
+    qw = StandardMetaCalculator.run_quality_weighted_ma(studies)
+    test("质量加权Meta分析", qw.get("quality_weighted") is True)
+except Exception as e:
+    test("meta_analysis_service算法导入", False, str(e))
+
+print("\n--- 19. Text Mining Worker服务导入测试 ---")
+try:
+    from text_mining_worker.main import app as tmw_app
+    test("text_mining_worker app导入", True)
+except Exception as e:
+    test("text_mining_worker app导入", False, str(e))
+
+try:
+    from text_mining_worker.processor import AdverseEventTextMiner, EfficacyTextAnalyzer, TextMiningWorker
+    test("TextMiningWorker导入", True)
+    worker = TextMiningWorker(num_workers=1)
+    test("TextMiningWorker实例化", True)
+    rx = AdverseEventTextMiner.extract_from_text("恶心呕吐腹痛")
+    test("文本挖掘不良反应提取", len(rx) > 0)
+    ea = EfficacyTextAnalyzer.compute_sentiment("一剂而愈")
+    test("文本挖掘疗效情感分析", ea > 0)
+except Exception as e:
+    test("text_mining_worker算法导入", False, str(e))
+
+print("\n--- 20. V2服务端口配置测试 ---")
+try:
+    test("efficacy_scorer端口", settings.efficacy_scorer_port == 8005)
+    test("dose_response_modeler端口", settings.dose_response_modeler_port == 8006)
+    test("adverse_event_miner端口", settings.adverse_event_miner_port == 8007)
+    test("clinical_trial_integrator端口", settings.clinical_trial_integrator_port == 8008)
+    test("meta_analysis_service端口", settings.meta_analysis_service_port == 8009)
+    test("text_mining_worker端口", settings.text_mining_worker_port == 8010)
+except Exception as e:
+    test("V2服务端口配置", False, str(e))
 
 print("\n" + "=" * 60)
 print(f"回归测试完成: {passed} 通过, {failed} 失败, 共 {passed + failed} 项")

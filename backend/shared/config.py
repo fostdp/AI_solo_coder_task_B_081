@@ -17,6 +17,12 @@ class ServiceSettings(BaseSettings):
     pattern_miner_port: int = 8002
     drug_discoverer_port: int = 8003
     graph_api_port: int = 8004
+    efficacy_scorer_port: int = 8005
+    dose_response_modeler_port: int = 8006
+    adverse_event_miner_port: int = 8007
+    clinical_trial_integrator_port: int = 8008
+    meta_analysis_service_port: int = 8009
+    text_mining_worker_port: int = 8010
     gateway_port: int = 8000
 
     class Config:

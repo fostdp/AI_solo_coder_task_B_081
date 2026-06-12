@@ -7,7 +7,7 @@ import os
 from shared.config import get_settings
 
 app = FastAPI(title="TCM Gateway", version="2.0.0",
-              description="中医药方剂系统网关 - 路由分发至4个微服务")
+              description="中医药方剂系统网关 - 路由分发至10个微服务")
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,6 +18,13 @@ app.add_middleware(
 settings = get_settings()
 
 SERVICE_MAP = {
+    "/efficacy/scorer": f"http://localhost:{settings.efficacy_scorer_port}",
+    "/efficacy/dose-response": f"http://localhost:{settings.dose_response_modeler_port}",
+    "/efficacy/adverse-events": f"http://localhost:{settings.adverse_event_miner_port}",
+    "/efficacy/clinical": f"http://localhost:{settings.clinical_trial_integrator_port}",
+    "/efficacy/summary": f"http://localhost:{settings.clinical_trial_integrator_port}",
+    "/meta-analysis": f"http://localhost:{settings.meta_analysis_service_port}",
+    "/text-mining": f"http://localhost:{settings.text_mining_worker_port}",
     "/formulas": f"http://localhost:{settings.formula_loader_port}",
     "/herbs": f"http://localhost:{settings.formula_loader_port}",
     "/diseases": f"http://localhost:{settings.formula_loader_port}",
@@ -79,6 +86,12 @@ def root():
             "pattern_miner": f"http://localhost:{settings.pattern_miner_port}",
             "drug_discoverer": f"http://localhost:{settings.drug_discoverer_port}",
             "graph_api": f"http://localhost:{settings.graph_api_port}",
+            "efficacy_scorer": f"http://localhost:{settings.efficacy_scorer_port}",
+            "dose_response_modeler": f"http://localhost:{settings.dose_response_modeler_port}",
+            "adverse_event_miner": f"http://localhost:{settings.adverse_event_miner_port}",
+            "clinical_trial_integrator": f"http://localhost:{settings.clinical_trial_integrator_port}",
+            "meta_analysis_service": f"http://localhost:{settings.meta_analysis_service_port}",
+            "text_mining_worker": f"http://localhost:{settings.text_mining_worker_port}",
         },
         "gateway": f"http://localhost:{settings.gateway_port}"
     }
